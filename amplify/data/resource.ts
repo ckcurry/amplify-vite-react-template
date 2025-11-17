@@ -7,10 +7,23 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.publicApiKey()]),
 
-  // ⭐ NEW: Project model
   Project: a
     .model({
       name: a.string().required(),
+      // one project → many milestones
+      milestones: a.hasMany("Milestone", "projectId"),
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
+  Milestone: a
+    .model({
+      title: a.string().required(),
+      // foreign key to Project
+      projectId: a.id().required(),
+      project: a.belongsTo("Project", "projectId"),
+      // optional extras:
+      dueDate: a.date(),          // or a.datetime()
+      completed: a.boolean(),
     })
     .authorization((allow) => [allow.publicApiKey()]),
 });
@@ -26,6 +39,7 @@ export const data = defineData({
     },
   },
 });
+
 
 
 /*== STEP 2 ===============================================================
