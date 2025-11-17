@@ -531,4 +531,55 @@ function App() {
             position: "fixed",
             inset: 0,
             background: "rgba(0, 0, 0, 0.5)",
-            display: "fle
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={closeUpdateDialog}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              minWidth: "320px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>New update</h2>
+            <form onSubmit={handleCreateUpdate}>
+              {/* later you’ll add file/video input + 60s check here */}
+              <textarea
+                placeholder="Optional note about this update"
+                value={newUpdateNote}
+                onChange={(e) => setNewUpdateNote(e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: "80px",
+                  marginBottom: "1rem",
+                  resize: "vertical",
+                }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button type="button" onClick={closeUpdateDialog}>
+                  Cancel
+                </button>
+                <button type="submit">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+export default App;
