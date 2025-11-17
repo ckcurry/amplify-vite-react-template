@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useAuthenticator } from '@aws-amplify/ui-react';
+import { useAuthenticator } from "@aws-amplify/ui-react";
 import type { Schema } from "../amplify/data/resource";
 import { generateClient } from "aws-amplify/data";
 
@@ -9,6 +9,11 @@ function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newTodoContent, setNewTodoContent] = useState("");
+  const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
+    null,
+    null,
+    null,
+  ]); // 3 active task slots
   const { signOut } = useAuthenticator();
 
   useEffect(() => {
@@ -16,7 +21,6 @@ function App() {
       next: (data) => setTodos([...data.items]),
     });
 
-    // optional cleanup
     return () => sub.unsubscribe();
   }, []);
 
@@ -29,7 +33,7 @@ function App() {
     setIsDialogOpen(false);
   }
 
-  async function handleCreateTodo(e?: React.FormEvent) {
+  async function handleCreateTodo(e?: any) {
     if (e) e.preventDefault();
 
     const content = newTodoContent.trim();
@@ -40,8 +44,19 @@ function App() {
     setIsDialogOpen(false);
   }
 
-  function deleteTodo(id: string) {
-    client.models.Todo.delete({ id });
+  function handleSlotChange(slotIndex: number, todoId: string) {
+    setActiveSlots((prev) => {
+      const copy = [...prev];
+      copy[slotIndex] = todoId || null;
+      return copy;
+    });
+  }
+
+  async function deleteTodo(id: string) {
+    // Clear it from any active slot(s)
+    setActiveSlots((prev) => prev.map((slotId) => (slotId === id ? null : slotId)));
+
+    await client.models.Todo.delete({ id });
   }
 
   return (
@@ -51,28 +66,80 @@ function App() {
       {/* Open dialog instead of window.prompt */}
       <button onClick={openCreateDialog}>+ new</button>
 
-      <ul>
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            onClick={() => deleteTodo(todo.id)}
-          >
-            {todo.content}
-          </li>
-        ))}
-      </ul>
+      {/* Three active task slots */}
+      <section style={{ marginTop: "1.5rem" }}>
+        <h2>Active Tasks</h2>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gap: "1rem",
+          }}
+        >
+          {activeSlots.map((slotTodoId, index) => {
+            const todo = todos.find((t) => t.id === slotTodoId);
+            return (
+              <div
+                key={index}
+                style={{
+                  border: "1px solid #ccc",
+                  borderRadius: "0.5rem",
+                  padding: "1rem",
+                  minHeight: "120px",
+                }}
+              >
+                <h3>Slot {index + 1}</h3>
+                <select
+                  value={slotTodoId ?? ""}
+                  onChange={(e) => handleSlotChange(index, e.target.value)}
+                  style={{ width: "100%", marginBottom: "0.75rem" }}
+                >
+                  <option value="">-- Select a task --</option>
+                  {todos.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.content}
+                    </option>
+                  ))}
+                </select>
 
-      <div>
-        🥳 App successfully hosted. Try creating a new todo.
+                {todo ? (
+                  <div
+                    style={{
+                      background: "#f3f3f3",
+                      padding: "0.5rem",
+                      borderRadius: "0.25rem",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => deleteTodo(todo.id)}
+                    title="Click to delete this task"
+                  >
+                    {todo.content}
+                  </div>
+                ) : (
+                  <div style={{ color: "#888", fontStyle: "italic" }}>
+                    No task selected
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <div style={{ marginTop: "2rem" }}>
+        🥳 App successfully hosted. Try creating a new todo and assigning it to a
+        slot.
         <br />
         <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
           Review next step of this tutorial.
         </a>
       </div>
 
-      <button onClick={signOut}>Sign out</button>
+      <button onClick={signOut} style={{ marginTop: "1rem" }}>
+        Sign out
+      </button>
 
-      {/* Simple dialog / modal */}
+      {/* Simple dialog / modal for creating a todo */}
       {isDialogOpen && (
         <div
           style={{
@@ -105,7 +172,13 @@ function App() {
                 onChange={(e) => setNewTodoContent(e.target.value)}
                 style={{ width: "100%", marginBottom: "1rem" }}
               />
-              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "flex-end",
+                }}
+              >
                 <button type="button" onClick={closeCreateDialog}>
                   Cancel
                 </button>
