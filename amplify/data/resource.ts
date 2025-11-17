@@ -10,7 +10,6 @@ const schema = a.schema({
   Project: a
     .model({
       name: a.string().required(),
-      // one project → many milestones
       milestones: a.hasMany("Milestone", "projectId"),
     })
     .authorization((allow) => [allow.publicApiKey()]),
@@ -18,12 +17,25 @@ const schema = a.schema({
   Milestone: a
     .model({
       title: a.string().required(),
-      // foreign key to Project
       projectId: a.id().required(),
       project: a.belongsTo("Project", "projectId"),
-      // optional extras:
-      dueDate: a.date(),          // or a.datetime()
+      dueDate: a.date(),
       completed: a.boolean(),
+      // ⭐ one milestone → many updates
+      updates: a.hasMany("MilestoneUpdate", "milestoneId"),
+    })
+    .authorization((allow) => [allow.publicApiKey()]),
+
+  // ⭐ NEW: updates for a milestone (video-based)
+  MilestoneUpdate: a
+    .model({
+      milestoneId: a.id().required(),
+      milestone: a.belongsTo("Milestone", "milestoneId"),
+
+      videoUrl: a.string().required(),        // S3 key or full URL
+      durationSeconds: a.integer().required(),// enforce 60s limit in UI
+
+      note: a.string(),                       // optional caption / comment
     })
     .authorization((allow) => [allow.publicApiKey()]),
 });
