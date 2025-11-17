@@ -8,9 +8,8 @@ const client = generateClient<Schema>();
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
-  const [milestones, setMilestones] = useState<
-    Array<Schema["Milestone"]["type"]>
-  >([]);
+  const [milestones, setMilestones] = useState<Array<Schema["Milestone"]["type"]>>([]);
+  const [updates, setUpdates] = useState<Array<Schema["MilestoneUpdate"]["type"]>>([]);
 
   // Todo dialog
   const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
@@ -25,6 +24,12 @@ function App() {
   const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
   const [selectedProjectIdForMilestone, setSelectedProjectIdForMilestone] =
     useState<string | null>(null);
+
+  // Update dialog (per milestone)
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
+    useState<string | null>(null);
+  const [newUpdateNote, setNewUpdateNote] = useState("");
 
   // 3 active task slots (Todo IDs)
   const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
@@ -48,10 +53,15 @@ function App() {
       next: (data) => setMilestones([...data.items]),
     });
 
+    const updateSub = client.models.MilestoneUpdate.observeQuery().subscribe({
+      next: (data) => setUpdates([...data.items]),
+    });
+
     return () => {
       todoSub.unsubscribe();
       projectSub.unsubscribe();
       milestoneSub.unsubscribe();
+      updateSub.unsubscribe();
     };
   }, []);
 
@@ -122,8 +132,9 @@ function App() {
 
   async function handleCreateMilestone(e?: React.FormEvent) {
     if (e) e.preventDefault();
+    if (!selectedProjectIdForMilestone) return;
     const title = newMilestoneTitle.trim();
-    if (!title || !selectedProjectIdForMilestone) return;
+    if (!title) return;
 
     await client.models.Milestone.create({
       title,
@@ -137,6 +148,41 @@ function App() {
 
   async function deleteMilestone(id: string) {
     await client.models.Milestone.delete({ id });
+  }
+
+  // ===== UPDATES =====
+  function openUpdateDialog(milestoneId: string) {
+    setSelectedMilestoneIdForUpdate(milestoneId);
+    setNewUpdateNote("");
+    setIsUpdateDialogOpen(true);
+  }
+
+  function closeUpdateDialog() {
+    setIsUpdateDialogOpen(false);
+    setSelectedMilestoneIdForUpdate(null);
+  }
+
+  async function handleCreateUpdate(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!selectedMilestoneIdForUpdate) return;
+
+    const note = newUpdateNote.trim();
+
+    // TODO: plug in real video upload + duration check (<= 60s)
+    await client.models.MilestoneUpdate.create({
+      milestoneId: selectedMilestoneIdForUpdate,
+      note,
+      videoUrl: "video-upload-pending", // placeholder
+      durationSeconds: 0,               // placeholder
+    });
+
+    setNewUpdateNote("");
+    setIsUpdateDialogOpen(false);
+    setSelectedMilestoneIdForUpdate(null);
+  }
+
+  async function deleteUpdate(id: string) {
+    await client.models.MilestoneUpdate.delete({ id });
   }
 
   return (
@@ -209,7 +255,7 @@ function App() {
         </div>
       </section>
 
-      {/* Projects + milestones */}
+      {/* Projects + milestones + updates */}
       <section style={{ marginBottom: "2rem" }}>
         <h2>Projects</h2>
         {projects.length === 0 ? (
@@ -241,7 +287,6 @@ function App() {
                     }}
                   >
                     <strong>{project.name}</strong>
-                    {/* ⭐ This is the per-project Add Milestone button */}
                     <button onClick={() => openMilestoneDialog(project.id)}>
                       + add milestone
                     </button>
@@ -253,16 +298,61 @@ function App() {
                     </div>
                   ) : (
                     <ul style={{ marginLeft: "1rem" }}>
-                      {projectMilestones.map((milestone) => (
-                        <li
-                          key={milestone.id}
-                          style={{ cursor: "pointer" }}
-                          title="Click to delete milestone"
-                          onClick={() => deleteMilestone(milestone.id)}
-                        >
-                          • {milestone.title}
-                        </li>
-                      ))}
+                      {projectMilestones.map((milestone) => {
+                        const milestoneUpdates = updates.filter(
+                          (u) => u.milestoneId === milestone.id
+                        );
+                        return (
+                          <li
+                            key={milestone.id}
+                            style={{ marginBottom: "0.5rem" }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                              }}
+                            >
+                              <span>• {milestone.title}</span>
+                              {/* ⭐ Add update button per milestone */}
+                              <div style={{ display: "flex", gap: "0.5rem" }}>
+                                <button
+                                  onClick={() => openUpdateDialog(milestone.id)}
+                                >
+                                  + add update
+                                </button>
+                                <button
+                                  onClick={() => deleteMilestone(milestone.id)}
+                                >
+                                  delete milestone
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Updates list under each milestone */}
+                            {milestoneUpdates.length > 0 && (
+                              <ul
+                                style={{
+                                  marginLeft: "1.5rem",
+                                  marginTop: "0.25rem",
+                                }}
+                              >
+                                {milestoneUpdates.map((update) => (
+                                  <li
+                                    key={update.id}
+                                    style={{ cursor: "pointer" }}
+                                    title="Click to delete update"
+                                    onClick={() => deleteUpdate(update.id)}
+                                  >
+                                    - {update.note || "Video update"}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </li>
@@ -273,7 +363,7 @@ function App() {
       </section>
 
       <div>
-        🥳 App successfully hosted. Try creating projects and milestones.
+        🥳 App successfully hosted. Try creating projects, milestones, and updates.
         <br />
         <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
           Review next step of this tutorial.
@@ -384,7 +474,7 @@ function App() {
         </div>
       )}
 
-      {/* ===== Milestone dialog (used by whichever project was clicked) ===== */}
+      {/* ===== Milestone dialog ===== */}
       {isMilestoneDialogOpen && selectedProjectIdForMilestone && (
         <div
           style={{
@@ -433,8 +523,12 @@ function App() {
           </div>
         </div>
       )}
-    </main>
-  );
-}
 
-export default App;
+      {/* ===== Update dialog (per milestone) ===== */}
+      {isUpdateDialogOpen && selectedMilestoneIdForUpdate && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "fle
