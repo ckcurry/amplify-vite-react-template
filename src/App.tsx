@@ -8,14 +8,25 @@ const client = generateClient<Schema>();
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
+  const [milestones, setMilestones] = useState<
+    Array<Schema["Milestone"]["type"]>
+  >([]);
 
+  // Todo dialog
   const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
   const [newTodoContent, setNewTodoContent] = useState("");
 
+  // Project dialog
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
-  // 3 active task slots (store todo IDs)
+  // Milestone dialog
+  const [isMilestoneDialogOpen, setIsMilestoneDialogOpen] = useState(false);
+  const [newMilestoneTitle, setNewMilestoneTitle] = useState("");
+  const [selectedProjectIdForMilestone, setSelectedProjectIdForMilestone] =
+    useState<string | null>(null);
+
+  // 3 active task slots (Todo IDs)
   const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
     null,
     null,
@@ -29,18 +40,22 @@ function App() {
       next: (data) => setTodos([...data.items]),
     });
 
-    // subscribe to projects as well
     const projectSub = client.models.Project.observeQuery().subscribe({
       next: (data) => setProjects([...data.items]),
+    });
+
+    const milestoneSub = client.models.Milestone.observeQuery().subscribe({
+      next: (data) => setMilestones([...data.items]),
     });
 
     return () => {
       todoSub.unsubscribe();
       projectSub.unsubscribe();
+      milestoneSub.unsubscribe();
     };
   }, []);
 
-  // ====== TODOS ======
+  // ===== TODOS =====
   function openTodoDialog() {
     setNewTodoContent("");
     setIsTodoDialogOpen(true);
@@ -69,12 +84,11 @@ function App() {
   }
 
   async function deleteTodo(id: string) {
-    // Clear it from any active slot(s)
     setActiveSlots((prev) => prev.map((slotId) => (slotId === id ? null : slotId)));
     await client.models.Todo.delete({ id });
   }
 
-  // ====== PROJECTS ======
+  // ===== PROJECTS =====
   function openProjectDialog() {
     setNewProjectName("");
     setIsProjectDialogOpen(true);
@@ -89,23 +103,53 @@ function App() {
     const name = newProjectName.trim();
     if (!name) return;
 
-    // assumes your Project model has a "name" field
     await client.models.Project.create({ name });
     setNewProjectName("");
     setIsProjectDialogOpen(false);
+  }
+
+  // ===== MILESTONES =====
+  function openMilestoneDialog(projectId: string) {
+    setSelectedProjectIdForMilestone(projectId);
+    setNewMilestoneTitle("");
+    setIsMilestoneDialogOpen(true);
+  }
+
+  function closeMilestoneDialog() {
+    setIsMilestoneDialogOpen(false);
+    setSelectedProjectIdForMilestone(null);
+  }
+
+  async function handleCreateMilestone(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    const title = newMilestoneTitle.trim();
+    if (!title || !selectedProjectIdForMilestone) return;
+
+    await client.models.Milestone.create({
+      title,
+      projectId: selectedProjectIdForMilestone,
+    });
+
+    setNewMilestoneTitle("");
+    setIsMilestoneDialogOpen(false);
+    setSelectedProjectIdForMilestone(null);
+  }
+
+  async function deleteMilestone(id: string) {
+    await client.models.Milestone.delete({ id });
   }
 
   return (
     <main>
       <h1>My todos</h1>
 
-      {/* Buttons row */}
+      {/* Top buttons */}
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
         <button onClick={openTodoDialog}>+ new task</button>
         <button onClick={openProjectDialog}>+ new project</button>
       </div>
 
-      {/* Three active task slots */}
+      {/* Active slots */}
       <section style={{ marginBottom: "2rem" }}>
         <h2>Active Tasks</h2>
         <div
@@ -165,7 +209,7 @@ function App() {
         </div>
       </section>
 
-      {/* Projects section */}
+      {/* Projects + milestones */}
       <section style={{ marginBottom: "2rem" }}>
         <h2>Projects</h2>
         {projects.length === 0 ? (
@@ -173,20 +217,74 @@ function App() {
             No projects yet. Click &quot;+ new project&quot; to add one.
           </p>
         ) : (
-          <ul>
-            {projects.map((project) => (
-              <li key={project.id}>{project.name}</li>
-            ))}
+          <ul style={{ listStyle: "none", padding: 0 }}>
+            {projects.map((project) => {
+              const projectMilestones = milestones.filter(
+                (m) => m.projectId === project.id
+              );
+              return (
+                <li
+                  key={project.id}
+                  style={{
+                    border: "1px solid #ddd",
+                    borderRadius: "0.5rem",
+                    padding: "1rem",
+                    marginBottom: "0.75rem",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginBottom: "0.5rem",
+                    }}
+                  >
+                    <strong>{project.name}</strong>
+                    {/* ⭐ This is the per-project Add Milestone button */}
+                    <button onClick={() => openMilestoneDialog(project.id)}>
+                      + add milestone
+                    </button>
+                  </div>
+
+                  {projectMilestones.length === 0 ? (
+                    <div style={{ color: "#888", fontStyle: "italic" }}>
+                      No milestones yet
+                    </div>
+                  ) : (
+                    <ul style={{ marginLeft: "1rem" }}>
+                      {projectMilestones.map((milestone) => (
+                        <li
+                          key={milestone.id}
+                          style={{ cursor: "pointer" }}
+                          title="Click to delete milestone"
+                          onClick={() => deleteMilestone(milestone.id)}
+                        >
+                          • {milestone.title}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
 
+      <div>
+        🥳 App successfully hosted. Try creating projects and milestones.
+        <br />
+        <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
+          Review next step of this tutorial.
+        </a>
+      </div>
 
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
       </button>
 
-      {/* ===== Todo Dialog ===== */}
+      {/* ===== Todo dialog ===== */}
       {isTodoDialogOpen && (
         <div
           style={{
@@ -236,7 +334,7 @@ function App() {
         </div>
       )}
 
-      {/* ===== Project Dialog ===== */}
+      {/* ===== Project dialog ===== */}
       {isProjectDialogOpen && (
         <div
           style={{
@@ -285,9 +383,58 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* ===== Milestone dialog (used by whichever project was clicked) ===== */}
+      {isMilestoneDialogOpen && selectedProjectIdForMilestone && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={closeMilestoneDialog}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              minWidth: "300px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>New milestone</h2>
+            <form onSubmit={handleCreateMilestone}>
+              <input
+                type="text"
+                placeholder="Milestone title"
+                value={newMilestoneTitle}
+                onChange={(e) => setNewMilestoneTitle(e.target.value)}
+                style={{ width: "100%", marginBottom: "1rem" }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button type="button" onClick={closeMilestoneDialog}>
+                  Cancel
+                </button>
+                <button type="submit">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
 export default App;
-
