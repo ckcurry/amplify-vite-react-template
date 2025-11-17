@@ -2,37 +2,63 @@ import { useEffect, useState } from "react";
 import { useAuthenticator } from '@aws-amplify/ui-react';
 import type { Schema } from "../amplify/data/resource";
 import { generateClient } from "aws-amplify/data";
-
-const client = generateClient<Schema>();
-
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newTodoContent, setNewTodoContent] = useState("");
   const { signOut } = useAuthenticator();
+
   useEffect(() => {
-    client.models.Todo.observeQuery().subscribe({
+    const sub = client.models.Todo.observeQuery().subscribe({
       next: (data) => setTodos([...data.items]),
     });
+
+    // optional cleanup
+    return () => sub.unsubscribe();
   }, []);
 
-  function createTodo() {
-    client.models.Todo.create({ content: window.prompt("Todo content") });
+  function openCreateDialog() {
+    setNewTodoContent("");
+    setIsDialogOpen(true);
   }
 
-    
+  function closeCreateDialog() {
+    setIsDialogOpen(false);
+  }
+
+  async function handleCreateTodo(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+
+    const content = newTodoContent.trim();
+    if (!content) return;
+
+    await client.models.Todo.create({ content });
+    setNewTodoContent("");
+    setIsDialogOpen(false);
+  }
+
   function deleteTodo(id: string) {
-    client.models.Todo.delete({ id })
+    client.models.Todo.delete({ id });
   }
 
   return (
     <main>
       <h1>My todos</h1>
-      <button onClick={createTodo}>+ new</button>
+
+      {/* Open dialog instead of window.prompt */}
+      <button onClick={openCreateDialog}>+ new</button>
+
       <ul>
         {todos.map((todo) => (
-          <li           onClick={() => deleteTodo(todo.id)}
-            key={todo.id}>{todo.content}</li>
+          <li
+            key={todo.id}
+            onClick={() => deleteTodo(todo.id)}
+          >
+            {todo.content}
+          </li>
         ))}
       </ul>
+
       <div>
         🥳 App successfully hosted. Try creating a new todo.
         <br />
@@ -40,7 +66,52 @@ function App() {
           Review next step of this tutorial.
         </a>
       </div>
+
       <button onClick={signOut}>Sign out</button>
+
+      {/* Simple dialog / modal */}
+      {isDialogOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={closeCreateDialog} // click outside to close
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              minWidth: "300px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()} // prevent closing when clicking inside
+          >
+            <h2 style={{ marginTop: 0 }}>New todo</h2>
+            <form onSubmit={handleCreateTodo}>
+              <input
+                type="text"
+                placeholder="Todo content"
+                value={newTodoContent}
+                onChange={(e) => setNewTodoContent(e.target.value)}
+                style={{ width: "100%", marginBottom: "1rem" }}
+              />
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button type="button" onClick={closeCreateDialog}>
+                  Cancel
+                </button>
+                <button type="submit">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
