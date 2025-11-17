@@ -181,7 +181,6 @@ function App() {
         )}
       </section>
 
-      <div>
 
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
