@@ -7,41 +7,57 @@ const client = generateClient<Schema>();
 
 function App() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
+
+  const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
   const [newTodoContent, setNewTodoContent] = useState("");
+
+  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+
+  // 3 active task slots (store todo IDs)
   const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
     null,
     null,
     null,
-  ]); // 3 active task slots
+  ]);
+
   const { signOut } = useAuthenticator();
 
   useEffect(() => {
-    const sub = client.models.Todo.observeQuery().subscribe({
+    const todoSub = client.models.Todo.observeQuery().subscribe({
       next: (data) => setTodos([...data.items]),
     });
 
-    return () => sub.unsubscribe();
+    // subscribe to projects as well
+    const projectSub = client.models.Project.observeQuery().subscribe({
+      next: (data) => setProjects([...data.items]),
+    });
+
+    return () => {
+      todoSub.unsubscribe();
+      projectSub.unsubscribe();
+    };
   }, []);
 
-  function openCreateDialog() {
+  // ====== TODOS ======
+  function openTodoDialog() {
     setNewTodoContent("");
-    setIsDialogOpen(true);
+    setIsTodoDialogOpen(true);
   }
 
-  function closeCreateDialog() {
-    setIsDialogOpen(false);
+  function closeTodoDialog() {
+    setIsTodoDialogOpen(false);
   }
 
-  async function handleCreateTodo(e?: any) {
+  async function handleCreateTodo(e?: React.FormEvent) {
     if (e) e.preventDefault();
-
     const content = newTodoContent.trim();
     if (!content) return;
 
     await client.models.Todo.create({ content });
     setNewTodoContent("");
-    setIsDialogOpen(false);
+    setIsTodoDialogOpen(false);
   }
 
   function handleSlotChange(slotIndex: number, todoId: string) {
@@ -55,19 +71,42 @@ function App() {
   async function deleteTodo(id: string) {
     // Clear it from any active slot(s)
     setActiveSlots((prev) => prev.map((slotId) => (slotId === id ? null : slotId)));
-
     await client.models.Todo.delete({ id });
+  }
+
+  // ====== PROJECTS ======
+  function openProjectDialog() {
+    setNewProjectName("");
+    setIsProjectDialogOpen(true);
+  }
+
+  function closeProjectDialog() {
+    setIsProjectDialogOpen(false);
+  }
+
+  async function handleCreateProject(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    const name = newProjectName.trim();
+    if (!name) return;
+
+    // assumes your Project model has a "name" field
+    await client.models.Project.create({ name });
+    setNewProjectName("");
+    setIsProjectDialogOpen(false);
   }
 
   return (
     <main>
       <h1>My todos</h1>
 
-      {/* Open dialog instead of window.prompt */}
-      <button onClick={openCreateDialog}>+ new</button>
+      {/* Buttons row */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+        <button onClick={openTodoDialog}>+ new task</button>
+        <button onClick={openProjectDialog}>+ new project</button>
+      </div>
 
       {/* Three active task slots */}
-      <section style={{ marginTop: "1.5rem" }}>
+      <section style={{ marginBottom: "2rem" }}>
         <h2>Active Tasks</h2>
         <div
           style={{
@@ -126,21 +165,30 @@ function App() {
         </div>
       </section>
 
-      <div style={{ marginTop: "2rem" }}>
-        🥳 App successfully hosted. Try creating a new todo and assigning it to a
-        slot.
-        <br />
-        <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
-          Review next step of this tutorial.
-        </a>
-      </div>
+      {/* Projects section */}
+      <section style={{ marginBottom: "2rem" }}>
+        <h2>Projects</h2>
+        {projects.length === 0 ? (
+          <p style={{ color: "#888", fontStyle: "italic" }}>
+            No projects yet. Click &quot;+ new project&quot; to add one.
+          </p>
+        ) : (
+          <ul>
+            {projects.map((project) => (
+              <li key={project.id}>{project.name}</li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <div>
 
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
       </button>
 
-      {/* Simple dialog / modal for creating a todo */}
-      {isDialogOpen && (
+      {/* ===== Todo Dialog ===== */}
+      {isTodoDialogOpen && (
         <div
           style={{
             position: "fixed",
@@ -151,7 +199,7 @@ function App() {
             justifyContent: "center",
             zIndex: 999,
           }}
-          onClick={closeCreateDialog} // click outside to close
+          onClick={closeTodoDialog}
         >
           <div
             style={{
@@ -161,13 +209,13 @@ function App() {
               minWidth: "300px",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
             }}
-            onClick={(e) => e.stopPropagation()} // prevent closing when clicking inside
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 style={{ marginTop: 0 }}>New todo</h2>
+            <h2 style={{ marginTop: 0 }}>New task</h2>
             <form onSubmit={handleCreateTodo}>
               <input
                 type="text"
-                placeholder="Todo content"
+                placeholder="Task content"
                 value={newTodoContent}
                 onChange={(e) => setNewTodoContent(e.target.value)}
                 style={{ width: "100%", marginBottom: "1rem" }}
@@ -179,7 +227,57 @@ function App() {
                   justifyContent: "flex-end",
                 }}
               >
-                <button type="button" onClick={closeCreateDialog}>
+                <button type="button" onClick={closeTodoDialog}>
+                  Cancel
+                </button>
+                <button type="submit">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Project Dialog ===== */}
+      {isProjectDialogOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+          }}
+          onClick={closeProjectDialog}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              minWidth: "300px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>New project</h2>
+            <form onSubmit={handleCreateProject}>
+              <input
+                type="text"
+                placeholder="Project name"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                style={{ width: "100%", marginBottom: "1rem" }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <button type="button" onClick={closeProjectDialog}>
                   Cancel
                 </button>
                 <button type="submit">Create</button>
@@ -193,3 +291,4 @@ function App() {
 }
 
 export default App;
+
