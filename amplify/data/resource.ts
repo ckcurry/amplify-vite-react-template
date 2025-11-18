@@ -40,6 +40,41 @@ const schema = a.schema({
       note: a.string(),
     })
     .authorization((allow) => [allow.owner()]),
+
+  Household: a
+  .model({
+    name: a.string().required(),
+    // you could add fields like "inviteCode" later
+  })
+  // All signed-in users can see households; we’ll restrict who can “join”
+  .authorization((allow) => [allow.authenticated()]),
+
+  HouseholdMembership: a
+  .model({
+    householdId: a.id().required(),
+    household: a.belongsTo("Household", "householdId"),
+  })
+  // Each user only sees their own membership row
+  .authorization((allow) => [allow.owner()]),
+
+  HouseholdProject: a
+  .model({
+    householdId: a.id().required(),
+    household: a.belongsTo("Household", "householdId"),
+    name: a.string().required(),
+  })
+  // Any signed-in user can “see” the data; UI will filter by householdId
+  .authorization((allow) => [allow.authenticated()]),
+
+  HouseholdTask: a
+  .model({
+    householdId: a.id().required(),
+    household: a.belongsTo("Household", "householdId"),
+    content: a.string().required(),
+    completed: a.boolean().default(false),
+  })
+  .authorization((allow) => [allow.authenticated()]),
+
 });
 
 export type Schema = ClientSchema<typeof schema>;
