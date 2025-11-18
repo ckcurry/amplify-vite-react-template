@@ -41,6 +41,17 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.owner()]),
 
+  Household: a
+    .model({
+      name: a.string().required(),
+
+      // back-references for relationships
+      memberships: a.hasMany("HouseholdMembership", "householdId"),
+      projects: a.hasMany("HouseholdProject", "householdId"),
+      tasks: a.hasMany("HouseholdTask", "householdId"),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
    HouseholdTask: a
     .model({
       householdId: a.id().required(),
