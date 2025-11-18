@@ -782,21 +782,457 @@ function Dashboard() {
   );
 }
 
-/* ===================== SIMPLE EXTRA PAGES ===================== */
+/* ===================== HOUSEHOLD PAGE ===================== */
 
 function HouseholdPage() {
+  const [households, setHouseholds] = useState<
+    Array<Schema["Household"]["type"]>
+  >([]);
+  const [membership, setMembership] =
+    useState<Schema["HouseholdMembership"]["type"] | null>(null);
+  const [householdProjects, setHouseholdProjects] = useState<
+    Array<Schema["HouseholdProject"]["type"]>
+  >([]);
+  const [householdTasks, setHouseholdTasks] = useState<
+    Array<Schema["HouseholdTask"]["type"]>
+  >([]);
+
+  const [newHouseholdName, setNewHouseholdName] = useState("");
+  const [householdToJoinId, setHouseholdToJoinId] = useState("");
+  const [newHouseholdProjectName, setNewHouseholdProjectName] = useState("");
+
+  const [newGeneralTask, setNewGeneralTask] = useState("");
+  const [newGroceryItem, setNewGroceryItem] = useState("");
+  const [newDinnerItem, setNewDinnerItem] = useState("");
+
+  // subscribe to household-related data
+  useEffect(() => {
+    // All households (for join dropdown)
+    const householdSub = client.models.Household.observeQuery().subscribe({
+      next: (data) => setHouseholds([...data.items]),
+    });
+
+    // This user's membership (owner-based; will only return their row)
+    const membershipSub =
+      client.models.HouseholdMembership.observeQuery().subscribe({
+        next: (data) => {
+          const first = data.items[0] ?? null;
+          setMembership(first);
+        },
+      });
+
+    const projectSub =
+      client.models.HouseholdProject.observeQuery().subscribe({
+        next: (data) => setHouseholdProjects([...data.items]),
+      });
+
+    const taskSub = client.models.HouseholdTask.observeQuery().subscribe({
+      next: (data) => setHouseholdTasks([...data.items]),
+    });
+
+    return () => {
+      householdSub.unsubscribe();
+      membershipSub.unsubscribe();
+      projectSub.unsubscribe();
+      taskSub.unsubscribe();
+    };
+  }, []);
+
+  const currentHouseholdId = membership?.householdId ?? null;
+  const currentHousehold =
+    currentHouseholdId != null
+      ? households.find((h) => h.id === currentHouseholdId) ?? null
+      : null;
+
+  const currentHouseholdProjects = currentHouseholdId
+    ? householdProjects.filter((p) => p.householdId === currentHouseholdId)
+    : [];
+
+  const currentHouseholdTasks = currentHouseholdId
+    ? householdTasks.filter((t) => t.householdId === currentHouseholdId)
+    : [];
+
+  // categorize tasks by prefix
+  const groceryPrefix = "GROCERY: ";
+  const dinnerPrefix = "DINNER: ";
+
+  const groceryItems = currentHouseholdTasks.filter((t) =>
+    t.content.startsWith(groceryPrefix)
+  );
+  const dinnerItems = currentHouseholdTasks.filter((t) =>
+    t.content.startsWith(dinnerPrefix)
+  );
+  const generalTasks = currentHouseholdTasks.filter(
+    (t) =>
+      !t.content.startsWith(groceryPrefix) &&
+      !t.content.startsWith(dinnerPrefix)
+  );
+
+  function stripPrefix(content: string, prefix: string) {
+    return content.startsWith(prefix) ? content.slice(prefix.length) : content;
+  }
+
+  // ===== actions =====
+
+  async function handleCreateHousehold(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    const name = newHouseholdName.trim();
+    if (!name || membership) return; // already in a household
+
+    const created = await client.models.Household.create({ name });
+    // link this user to that household
+    await client.models.HouseholdMembership.create({
+      householdId: created.id,
+    });
+
+    setNewHouseholdName("");
+  }
+
+  async function handleJoinHousehold(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (membership) return; // already in one household
+    if (!householdToJoinId) return;
+
+    await client.models.HouseholdMembership.create({
+      householdId: householdToJoinId,
+    });
+    setHouseholdToJoinId("");
+  }
+
+  async function handleCreateHouseholdProject(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!currentHouseholdId) return;
+    const name = newHouseholdProjectName.trim();
+    if (!name) return;
+
+    await client.models.HouseholdProject.create({
+      householdId: currentHouseholdId,
+      name,
+    });
+
+    setNewHouseholdProjectName("");
+  }
+
+  async function createHouseholdTask(
+    content: string,
+    options?: { prefix?: string }
+  ) {
+    if (!currentHouseholdId) return;
+    const trimmed = content.trim();
+    if (!trimmed) return;
+
+    const finalContent = options?.prefix
+      ? `${options.prefix}${trimmed}`
+      : trimmed;
+
+    await client.models.HouseholdTask.create({
+      householdId: currentHouseholdId,
+      content: finalContent,
+      completed: false,
+    });
+  }
+
+  async function handleCreateGeneralTask(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    await createHouseholdTask(newGeneralTask);
+    setNewGeneralTask("");
+  }
+
+  async function handleAddGroceryItem(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    await createHouseholdTask(newGroceryItem, { prefix: groceryPrefix });
+    setNewGroceryItem("");
+  }
+
+  async function handleAddDinnerItem(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    await createHouseholdTask(newDinnerItem, { prefix: dinnerPrefix });
+    setNewDinnerItem("");
+  }
+
+  async function toggleTaskCompleted(task: Schema["HouseholdTask"]["type"]) {
+    await client.models.HouseholdTask.update({
+      id: task.id,
+      completed: !task.completed,
+    });
+  }
+
+  async function deleteTask(id: string) {
+    await client.models.HouseholdTask.delete({ id });
+  }
+
   return (
     <main>
       <h1>Household</h1>
-      <p>
-        This is your household space. One user can belong to a single household,
-        and each household can have many members, projects, and tasks.
-      </p>
-      {/* We'll later hook this up to real household data (projects + tasks). */}
+
+      {!membership && (
+        <section style={{ marginBottom: "2rem" }}>
+          <p>
+            You are not part of a household yet. You can create a new household
+            or join an existing one.
+          </p>
+
+          <div
+            style={{
+              display: "grid",
+              gap: "1.5rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+              marginTop: "1rem",
+            }}
+          >
+            {/* Create household */}
+            <div
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <h2>Create household</h2>
+              <form onSubmit={handleCreateHousehold}>
+                <input
+                  type="text"
+                  placeholder="Household name"
+                  value={newHouseholdName}
+                  onChange={(e) => setNewHouseholdName(e.target.value)}
+                  style={{ width: "100%", marginBottom: "0.75rem" }}
+                />
+                <button type="submit">Create household</button>
+              </form>
+            </div>
+
+            {/* Join household */}
+            <div
+              style={{
+                border: "1px solid #ddd",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+              }}
+            >
+              <h2>Join household</h2>
+              {households.length === 0 ? (
+                <p style={{ color: "#888", fontStyle: "italic" }}>
+                  No households exist yet. Create one to get started.
+                </p>
+              ) : (
+                <form onSubmit={handleJoinHousehold}>
+                  <select
+                    value={householdToJoinId}
+                    onChange={(e) => setHouseholdToJoinId(e.target.value)}
+                    style={{ width: "100%", marginBottom: "0.75rem" }}
+                  >
+                    <option value="">Select a household</option>
+                    {households.map((h) => (
+                      <option key={h.id} value={h.id}>
+                        {h.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="submit">Join selected household</button>
+                </form>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {membership && currentHousehold && (
+        <>
+          <section style={{ marginBottom: "2rem" }}>
+            <h2>Your household: {currentHousehold.name}</h2>
+            <p>
+              All members of this household can collaborate on projects, tasks,
+              and shared lists below.
+            </p>
+          </section>
+
+          {/* Household projects */}
+          <section style={{ marginBottom: "2rem" }}>
+            <h3>Household Projects</h3>
+            <form onSubmit={handleCreateHouseholdProject}>
+              <input
+                type="text"
+                placeholder="New household project"
+                value={newHouseholdProjectName}
+                onChange={(e) => setNewHouseholdProjectName(e.target.value)}
+                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
+              />
+              <button type="submit">Add project</button>
+            </form>
+
+            {currentHouseholdProjects.length === 0 ? (
+              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
+                No household projects yet.
+              </p>
+            ) : (
+              <ul style={{ marginTop: "0.75rem" }}>
+                {currentHouseholdProjects.map((p) => (
+                  <li key={p.id}>• {p.name}</li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* General household tasks */}
+          <section style={{ marginBottom: "2rem" }}>
+            <h3>Household Tasks</h3>
+            <form onSubmit={handleCreateGeneralTask}>
+              <input
+                type="text"
+                placeholder="New household task"
+                value={newGeneralTask}
+                onChange={(e) => setNewGeneralTask(e.target.value)}
+                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
+              />
+              <button type="submit">Add task</button>
+            </form>
+
+            {generalTasks.length === 0 ? (
+              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
+                No general tasks yet.
+              </p>
+            ) : (
+              <ul style={{ marginTop: "0.75rem" }}>
+                {generalTasks.map((t) => (
+                  <li
+                    key={t.id}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!t.completed}
+                      onChange={() => toggleTaskCompleted(t)}
+                    />
+                    <span
+                      style={{
+                        textDecoration: t.completed ? "line-through" : "none",
+                      }}
+                    >
+                      {t.content}
+                    </span>
+                    <button
+                      onClick={() => deleteTask(t.id)}
+                      style={{ fontSize: "0.75rem", marginLeft: "0.5rem" }}
+                    >
+                      delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Grocery list */}
+          <section style={{ marginBottom: "2rem" }}>
+            <h3>Grocery List</h3>
+            <form onSubmit={handleAddGroceryItem}>
+              <input
+                type="text"
+                placeholder="Add grocery item"
+                value={newGroceryItem}
+                onChange={(e) => setNewGroceryItem(e.target.value)}
+                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
+              />
+              <button type="submit">Add item</button>
+            </form>
+
+            {groceryItems.length === 0 ? (
+              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
+                No grocery items yet.
+              </p>
+            ) : (
+              <ul style={{ marginTop: "0.75rem" }}>
+                {groceryItems.map((t) => (
+                  <li
+                    key={t.id}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!t.completed}
+                      onChange={() => toggleTaskCompleted(t)}
+                    />
+                    <span
+                      style={{
+                        textDecoration: t.completed ? "line-through" : "none",
+                      }}
+                    >
+                      {stripPrefix(t.content, groceryPrefix)}
+                    </span>
+                    <button
+                      onClick={() => deleteTask(t.id)}
+                      style={{ fontSize: "0.75rem", marginLeft: "0.5rem" }}
+                    >
+                      delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Dinner list */}
+          <section style={{ marginBottom: "2rem" }}>
+            <h3>Dinner List</h3>
+            <form onSubmit={handleAddDinnerItem}>
+              <input
+                type="text"
+                placeholder="Add dinner item"
+                value={newDinnerItem}
+                onChange={(e) => setNewDinnerItem(e.target.value)}
+                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
+              />
+              <button type="submit">Add item</button>
+            </form>
+
+            {dinnerItems.length === 0 ? (
+              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
+                No dinner items yet.
+              </p>
+            ) : (
+              <ul style={{ marginTop: "0.75rem" }}>
+                {dinnerItems.map((t) => (
+                  <li
+                    key={t.id}
+                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={!!t.completed}
+                      onChange={() => toggleTaskCompleted(t)}
+                    />
+                    <span
+                      style={{
+                        textDecoration: t.completed ? "line-through" : "none",
+                      }}
+                    >
+                      {stripPrefix(t.content, dinnerPrefix)}
+                    </span>
+                    <button
+                      onClick={() => deleteTask(t.id)}
+                      style={{ fontSize: "0.75rem", marginLeft: "0.5rem" }}
+                    >
+                      delete
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        </>
+      )}
+
+      {membership && !currentHousehold && (
+        <p style={{ color: "red" }}>
+          You have a household membership, but the household record could not be
+          found.
+        </p>
+      )}
     </main>
   );
 }
 
+/* ===================== SIMPLE EXTRA PAGES ===================== */
 
 function Page2() {
   return (
@@ -891,7 +1327,7 @@ function App() {
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Page 1
+                    Household
                   </Link>
                 </li>
                 <li>
