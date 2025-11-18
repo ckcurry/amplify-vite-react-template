@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import type { Schema } from "../amplify/data/resource";
+import { uploadData } from "aws-amplify/storage";
 import { generateClient } from "aws-amplify/data";
 
 const client = generateClient<Schema>();
@@ -30,6 +31,18 @@ function App() {
   const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
     useState<string | null>(null);
   const [newUpdateNote, setNewUpdateNote] = useState("");
+
+  // Update dialog (per milestone)
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
+    useState<string | null>(null);
+  const [newUpdateNote, setNewUpdateNote] = useState("");
+
+  // ⭐ NEW: video file + error + uploading state
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
+
 
   // 3 active task slots (Todo IDs)
   const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
@@ -108,6 +121,25 @@ function App() {
     setIsProjectDialogOpen(false);
   }
 
+  async function getVideoDurationInSeconds(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src);
+      resolve(video.duration);
+    };
+
+    video.onerror = (e) => {
+      reject(new Error("Failed to load video metadata"));
+    };
+
+    video.src = URL.createObjectURL(file);
+  });
+}
+
+
   async function handleCreateProject(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const name = newProjectName.trim();
@@ -154,32 +186,78 @@ function App() {
   function openUpdateDialog(milestoneId: string) {
     setSelectedMilestoneIdForUpdate(milestoneId);
     setNewUpdateNote("");
+    setSelectedVideoFile(null);
+    setUpdateError(null);
     setIsUpdateDialogOpen(true);
-  }
+  }  
 
   function closeUpdateDialog() {
     setIsUpdateDialogOpen(false);
     setSelectedMilestoneIdForUpdate(null);
+    setSelectedVideoFile(null);
+    setUpdateError(null);
   }
 
-  async function handleCreateUpdate(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!selectedMilestoneIdForUpdate) return;
+
+async function handleCreateUpdate(e?: React.FormEvent) {
+  if (e) e.preventDefault();
+  if (!selectedMilestoneIdForUpdate) return;
+
+  setUpdateError(null);
+
+  if (!selectedVideoFile) {
+    setUpdateError("Please select a video file.");
+    return;
+  }
+
+  try {
+    setIsUploadingUpdate(true);
+
+    // ⏱ get actual video length
+    const durationSeconds = await getVideoDurationInSeconds(selectedVideoFile);
+
+    if (durationSeconds > 60) {
+      setIsUploadingUpdate(false);
+      setUpdateError("Video must be 60 seconds or less.");
+      return;
+    }
+
+    // 📁 choose an S3 key
+    const key = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${
+      selectedVideoFile.name
+    }`;
+
+    // ⬆️ upload to Amplify Storage
+    await uploadData({
+      key,
+      data: selectedVideoFile,
+      options: {
+        contentType: selectedVideoFile.type,
+      },
+    }).result;
 
     const note = newUpdateNote.trim();
 
-    // TODO: plug in real video upload + duration check (<= 60s)
+    // 📝 create the MilestoneUpdate record
     await client.models.MilestoneUpdate.create({
       milestoneId: selectedMilestoneIdForUpdate,
       note,
-      videoUrl: "video-upload-pending", // placeholder
-      durationSeconds: 0,               // placeholder
+      videoUrl: key, // storing S3 key
+      durationSeconds: Math.round(durationSeconds),
     });
 
     setNewUpdateNote("");
+    setSelectedVideoFile(null);
     setIsUpdateDialogOpen(false);
     setSelectedMilestoneIdForUpdate(null);
+  } catch (err) {
+    console.error(err);
+    setUpdateError("Something went wrong uploading the video.");
+  } finally {
+    setIsUploadingUpdate(false);
   }
+}
+
 
   async function deleteUpdate(id: string) {
     await client.models.MilestoneUpdate.delete({ id });
