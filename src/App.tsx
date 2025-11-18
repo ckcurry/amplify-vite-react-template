@@ -125,7 +125,7 @@ function App() {
       resolve(video.duration);
     };
 
-    video.onerror = (e) => {
+    video.onerror = (_e) => {
       reject(new Error("Failed to load video metadata"));
     };
 
