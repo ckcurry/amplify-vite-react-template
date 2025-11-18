@@ -41,45 +41,70 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.owner()]),
 
-  Household: a
+   Household: a
     .model({
-    name: a.string().required(),
-
-    // 🔹 THIS is the part the error is asking for:
-    memberships: a.hasMany("HouseholdMembership", "householdId"),
-
-    // optional but nice: see all projects/tasks for this household
-    projects: a.hasMany("HouseholdProject", "householdId"),
-    tasks: a.hasMany("HouseholdTask", "householdId"),
-  })
-  // All signed-in users can see households; we’ll restrict who can “join”
-  .authorization((allow) => [allow.authenticated()]),
+      name: a.string().required(),
+      memberships: a.hasMany("HouseholdMembership", "householdId"),
+      projects: a.hasMany("HouseholdProject", "householdId"),
+      tasks: a.hasMany("HouseholdTask", "householdId"),
+    })
+    .authorization((allow) => [allow.authenticated()]),
 
   HouseholdMembership: a
-  .model({
-    householdId: a.id().required(),
-    household: a.belongsTo("Household", "householdId"),
-  })
-  // Each user only sees their own membership row
-  .authorization((allow) => [allow.owner()]),
+    .model({
+      householdId: a.id().required(),
+      household: a.belongsTo("Household", "householdId"),
+    })
+    .authorization((allow) => [allow.owner()]),
 
   HouseholdProject: a
-  .model({
-    householdId: a.id().required(),
-    household: a.belongsTo("Household", "householdId"),
-    name: a.string().required(),
-  })
-  // Any signed-in user can “see” the data; UI will filter by householdId
-  .authorization((allow) => [allow.authenticated()]),
+    .model({
+      householdId: a.id().required(),
+      household: a.belongsTo("Household", "householdId"),
+
+      name: a.string().required(),
+
+      // 🔹 NEW: each household project has many milestones
+      milestones: a.hasMany("HouseholdMilestone", "projectId"),
+    })
+    .authorization((allow) => [allow.authenticated()]),
 
   HouseholdTask: a
-  .model({
-    householdId: a.id().required(),
-    household: a.belongsTo("Household", "householdId"),
-    content: a.string().required(),
-    completed: a.boolean().default(false),
-  })
-  .authorization((allow) => [allow.authenticated()]),
+    .model({
+      householdId: a.id().required(),
+      household: a.belongsTo("Household", "householdId"),
+      content: a.string().required(),
+      completed: a.boolean().default(false),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  // 🔹 NEW: household project milestones
+  HouseholdMilestone: a
+    .model({
+      title: a.string().required(),
+
+      projectId: a.id().required(),
+      project: a.belongsTo("HouseholdProject", "projectId"),
+
+      dueDate: a.date(),
+      completed: a.boolean().default(false),
+
+      // each milestone can have many updates
+      updates: a.hasMany("HouseholdMilestoneUpdate", "milestoneId"),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  // 🔹 NEW: household milestone updates (with video, like your main app)
+  HouseholdMilestoneUpdate: a
+    .model({
+      milestoneId: a.id().required(),
+      milestone: a.belongsTo("HouseholdMilestone", "milestoneId"),
+
+      videoUrl: a.string().required(),
+      durationSeconds: a.integer().required(),
+      note: a.string(),
+    })
+    .authorization((allow) => [allow.authenticated()]),
 
 });
 
