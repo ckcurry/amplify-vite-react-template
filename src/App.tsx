@@ -622,7 +622,24 @@ async function handleCreateUpdate(e?: React.FormEvent) {
           >
             <h2 style={{ marginTop: 0 }}>New update</h2>
             <form onSubmit={handleCreateUpdate}>
-              {/* later you’ll add file/video input + 60s check here */}
+              {/* 🎥 video picker/recorder */}
+              <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                Video (max 60 seconds)
+              </label>
+              <input
+                type="file"
+                accept="video/*"
+                // capture hints camera on mobile browsers
+                capture="user"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setSelectedVideoFile(file);
+                  setUpdateError(null);
+                }}
+                style={{ marginBottom: "1rem", width: "100%" }}
+              />
+      
+              {/* optional note */}
               <textarea
                 placeholder="Optional note about this update"
                 value={newUpdateNote}
@@ -630,10 +647,23 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                 style={{
                   width: "100%",
                   minHeight: "80px",
-                  marginBottom: "1rem",
+                  marginBottom: "0.75rem",
                   resize: "vertical",
                 }}
               />
+      
+              {updateError && (
+                <div
+                  style={{
+                    color: "red",
+                    marginBottom: "0.75rem",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {updateError}
+                </div>
+              )}
+      
               <div
                 style={{
                   display: "flex",
@@ -641,15 +671,18 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                   justifyContent: "flex-end",
                 }}
               >
-                <button type="button" onClick={closeUpdateDialog}>
+                <button type="button" onClick={closeUpdateDialog} disabled={isUploadingUpdate}>
                   Cancel
                 </button>
-                <button type="submit">Create</button>
+                <button type="submit" disabled={isUploadingUpdate}>
+                  {isUploadingUpdate ? "Uploading..." : "Create"}
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
     </main>
   );
 }
