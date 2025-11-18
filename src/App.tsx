@@ -207,23 +207,19 @@ async function handleCreateUpdate(e?: React.FormEvent) {
   try {
     setIsUploadingUpdate(true);
 
-    // ⏱ get actual video length
+    // ⏱ check duration <= 60s
     const durationSeconds = await getVideoDurationInSeconds(selectedVideoFile);
-
     if (durationSeconds > 60) {
       setIsUploadingUpdate(false);
       setUpdateError("Video must be 60 seconds or less.");
       return;
     }
 
-    // 📁 choose an S3 key
-    const key = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${
-      selectedVideoFile.name
-    }`;
+    // ✅ use `path`, and keep it under milestone-updates/*
+    const path = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${selectedVideoFile.name}`;
 
-    // ⬆️ upload to Amplify Storage
-    await uploadData({
-      key,
+    const result = await uploadData({
+      path,
       data: selectedVideoFile,
       options: {
         contentType: selectedVideoFile.type,
@@ -232,11 +228,10 @@ async function handleCreateUpdate(e?: React.FormEvent) {
 
     const note = newUpdateNote.trim();
 
-    // 📝 create the MilestoneUpdate record
     await client.models.MilestoneUpdate.create({
       milestoneId: selectedMilestoneIdForUpdate,
       note,
-      videoUrl: key, // storing S3 key
+      videoUrl: result?.path ?? path,   // store the Storage path
       durationSeconds: Math.round(durationSeconds),
     });
 
@@ -245,8 +240,11 @@ async function handleCreateUpdate(e?: React.FormEvent) {
     setIsUpdateDialogOpen(false);
     setSelectedMilestoneIdForUpdate(null);
   } catch (err) {
-    console.error(err);
-    setUpdateError("Something went wrong uploading the video.");
+    console.error("Upload failed:", err);
+    // show the real error so we can see what's happening
+    setUpdateError(
+      err instanceof Error ? err.message : "Something went wrong uploading the video."
+    );
   } finally {
     setIsUploadingUpdate(false);
   }
