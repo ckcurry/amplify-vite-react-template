@@ -1659,12 +1659,17 @@ function App() {
 
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/household" element={<HouseholdPage />} />
+        <Route path="/household" element={<HouseholdHome />} />
+        <Route path="/household/projects" element={<HouseholdProjectsPage />} />
+        <Route path="/household/grocery" element={<HouseholdGroceryPage />} />
+        <Route path="/household/news" element={<FamilyNewsPage />} />
+        {/* your other pages */}
         <Route path="/page2" element={<Page2 />} />
         <Route path="/page3" element={<Page3 />} />
         <Route path="/page4" element={<Page4 />} />
         <Route path="/page5" element={<Page5 />} />
       </Routes>
+
     </BrowserRouter>
   );
 }
