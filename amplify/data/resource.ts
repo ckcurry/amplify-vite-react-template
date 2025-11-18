@@ -1,19 +1,23 @@
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 
 const schema = a.schema({
+  // Simple personal todo items
   Todo: a
     .model({
       content: a.string(),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    // ⭐ Only the owner can read/write their todos
+    .authorization((allow) => [allow.owner()]),
 
+  // Projects belong to the signed-in user
   Project: a
     .model({
       name: a.string().required(),
       milestones: a.hasMany("Milestone", "projectId"),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [allow.owner()]),
 
+  // Each project has many milestones; still owned by the same user
   Milestone: a
     .model({
       title: a.string().required(),
@@ -21,23 +25,21 @@ const schema = a.schema({
       project: a.belongsTo("Project", "projectId"),
       dueDate: a.date(),
       completed: a.boolean(),
-      // ⭐ one milestone → many updates
       updates: a.hasMany("MilestoneUpdate", "milestoneId"),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [allow.owner()]),
 
-  // ⭐ NEW: updates for a milestone (video-based)
+  // Each milestone can have many video updates
   MilestoneUpdate: a
     .model({
       milestoneId: a.id().required(),
       milestone: a.belongsTo("Milestone", "milestoneId"),
 
-      videoUrl: a.string().required(),        // S3 key or full URL
-      durationSeconds: a.integer().required(),// enforce 60s limit in UI
-
-      note: a.string(),                       // optional caption / comment
+      videoUrl: a.string().required(),        // storage path
+      durationSeconds: a.integer().required(),
+      note: a.string(),
     })
-    .authorization((allow) => [allow.publicApiKey()]),
+    .authorization((allow) => [allow.owner()]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
@@ -45,40 +47,13 @@ export type Schema = ClientSchema<typeof schema>;
 export const data = defineData({
   schema,
   authorizationModes: {
-    defaultAuthorizationMode: "apiKey",
-    apiKeyAuthorizationMode: {
-      expiresInDays: 30,
-    },
+    // ⭐ Use the signed-in user (Cognito user pool) by default
+    defaultAuthorizationMode: "userPool",
+    // If you no longer need public API access, you can remove the apiKey block completely.
+    // If you DO need an API key for something else, leave it but it won't apply to these
+    // models because they only allow owner().
+    // apiKeyAuthorizationMode: {
+    //   expiresInDays: 30,
+    // },
   },
 });
-
-
-
-/*== STEP 2 ===============================================================
-Go to your frontend source code. From your client-side code, generate a
-Data client to make CRUDL requests to your table. (THIS SNIPPET WILL ONLY
-WORK IN THE FRONTEND CODE FILE.)
-
-Using JavaScript or Next.js React Server Components, Middleware, Server 
-Actions or Pages Router? Review how to generate Data clients for those use
-cases: https://docs.amplify.aws/gen2/build-a-backend/data/connect-to-API/
-=========================================================================*/
-
-/*
-"use client"
-import { generateClient } from "aws-amplify/data";
-import type { Schema } from "@/amplify/data/resource";
-
-const client = generateClient<Schema>() // use this Data client for CRUDL requests
-*/
-
-/*== STEP 3 ===============================================================
-Fetch records from the database and use them in your frontend component.
-(THIS SNIPPET WILL ONLY WORK IN THE FRONTEND CODE FILE.)
-=========================================================================*/
-
-/* For example, in a React component, you can use this snippet in your
-  function's RETURN statement */
-// const { data: todos } = await client.models.Todo.list()
-
-// return <ul>{todos.map(todo => <li key={todo.id}>{todo.content}</li>)}</ul>
