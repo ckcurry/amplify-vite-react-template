@@ -528,14 +528,7 @@ function App() {
         )}
       </section>
 
-      <div>
-        🥳 App successfully hosted. Try creating projects, milestones, and
-        updates.
-        <br />
-        <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
-          Review next step of this tutorial.
-        </a>
-      </div>
+    
 
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
