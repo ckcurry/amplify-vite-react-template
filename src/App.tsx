@@ -32,12 +32,6 @@ function App() {
     useState<string | null>(null);
   const [newUpdateNote, setNewUpdateNote] = useState("");
 
-  // Update dialog (per milestone)
-  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
-  const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
-    useState<string | null>(null);
-  const [newUpdateNote, setNewUpdateNote] = useState("");
-
   // ⭐ NEW: video file + error + uploading state
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
