@@ -41,12 +41,15 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.owner()]),
 
-   Household: a
+   HouseholdTask: a
     .model({
-      name: a.string().required(),
-      memberships: a.hasMany("HouseholdMembership", "householdId"),
-      projects: a.hasMany("HouseholdProject", "householdId"),
-      tasks: a.hasMany("HouseholdTask", "householdId"),
+      householdId: a.id().required(),
+      household: a.belongsTo("Household", "householdId"),
+      content: a.string().required(),
+      completed: a.boolean().default(false),
+  
+      // ⭐ NEW: date this task is scheduled for (used by the calendar)
+      scheduledFor: a.date(),   // optional
     })
     .authorization((allow) => [allow.authenticated()]),
 
