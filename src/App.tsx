@@ -784,14 +784,19 @@ function Dashboard() {
 
 /* ===================== SIMPLE EXTRA PAGES ===================== */
 
-function Page1() {
+function HouseholdPage() {
   return (
     <main>
-      <h1>Page 1</h1>
-      <p>Custom content for page 1.</p>
+      <h1>Household</h1>
+      <p>
+        This is your household space. One user can belong to a single household,
+        and each household can have many members, projects, and tasks.
+      </p>
+      {/* We'll later hook this up to real household data (projects + tasks). */}
     </main>
   );
 }
+
 
 function Page2() {
   return (
@@ -882,7 +887,7 @@ function App() {
                 </li>
                 <li>
                   <Link
-                    to="/page1"
+                    to="/household"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
@@ -933,7 +938,7 @@ function App() {
 
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/page1" element={<Page1 />} />
+        <Route path="/household" element={<HouseholdPage />} />
         <Route path="/page2" element={<Page2 />} />
         <Route path="/page3" element={<Page3 />} />
         <Route path="/page4" element={<Page4 />} />
