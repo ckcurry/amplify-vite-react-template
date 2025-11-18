@@ -782,48 +782,37 @@ function Dashboard() {
   );
 }
 
-/* ===================== HOUSEHOLD PAGE ===================== */
+/* ===================== HOUSEHOLD HOME (calendar + buttons) ===================== */
 
-function HouseholdPage() {
-  const [households, setHouseholds] = useState<
-    Array<Schema["Household"]["type"]>
-  >([]);
+function HouseholdHome() {
+  const [households, setHouseholds] =
+    useState<Array<Schema["Household"]["type"]>>([]);
   const [membership, setMembership] =
     useState<Schema["HouseholdMembership"]["type"] | null>(null);
-  const [householdProjects, setHouseholdProjects] = useState<
-    Array<Schema["HouseholdProject"]["type"]>
-  >([]);
   const [householdTasks, setHouseholdTasks] = useState<
     Array<Schema["HouseholdTask"]["type"]>
   >([]);
 
   const [newHouseholdName, setNewHouseholdName] = useState("");
   const [householdToJoinId, setHouseholdToJoinId] = useState("");
-  const [newHouseholdProjectName, setNewHouseholdProjectName] = useState("");
 
-  const [newGeneralTask, setNewGeneralTask] = useState("");
-  const [newGroceryItem, setNewGroceryItem] = useState("");
-  const [newDinnerItem, setNewDinnerItem] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [newTaskForDate, setNewTaskForDate] = useState("");
 
-  // subscribe to household-related data
+  // subscribe to household + membership + tasks
   useEffect(() => {
-    // All households (for join dropdown)
     const householdSub = client.models.Household.observeQuery().subscribe({
       next: (data) => setHouseholds([...data.items]),
     });
 
-    // This user's membership (owner-based; will only return their row)
     const membershipSub =
       client.models.HouseholdMembership.observeQuery().subscribe({
         next: (data) => {
           const first = data.items[0] ?? null;
           setMembership(first);
         },
-      });
-
-    const projectSub =
-      client.models.HouseholdProject.observeQuery().subscribe({
-        next: (data) => setHouseholdProjects([...data.items]),
       });
 
     const taskSub = client.models.HouseholdTask.observeQuery().subscribe({
@@ -833,7 +822,6 @@ function HouseholdPage() {
     return () => {
       householdSub.unsubscribe();
       membershipSub.unsubscribe();
-      projectSub.unsubscribe();
       taskSub.unsubscribe();
     };
   }, []);
@@ -844,63 +832,39 @@ function HouseholdPage() {
       ? households.find((h) => h.id === currentHouseholdId) ?? null
       : null;
 
-  const currentHouseholdProjects = currentHouseholdId
-    ? householdProjects.filter((p) => p.householdId === currentHouseholdId)
-    : [];
-
-  const currentHouseholdTasks = currentHouseholdId
-    ? householdTasks.filter((t) => t.householdId === currentHouseholdId)
-    : [];
-
-  // categorize tasks by prefix
-  const groceryPrefix = "GROCERY: ";
-  const dinnerPrefix = "DINNER: ";
-
-  const groceryItems = currentHouseholdTasks.filter((t) =>
-    t.content.startsWith(groceryPrefix)
-  );
-  const dinnerItems = currentHouseholdTasks.filter((t) =>
-    t.content.startsWith(dinnerPrefix)
-  );
-  const generalTasks = currentHouseholdTasks.filter(
-    (t) =>
-      !t.content.startsWith(groceryPrefix) &&
-      !t.content.startsWith(dinnerPrefix)
-  );
-
-  function stripPrefix(content: string, prefix: string) {
-    return content.startsWith(prefix) ? content.slice(prefix.length) : content;
-  }
-
-  // ===== actions =====
+  const tasksForSelectedDate =
+    currentHouseholdId == null
+      ? []
+      : householdTasks.filter(
+          (t) =>
+            t.householdId === currentHouseholdId &&
+            t.scheduledFor === selectedDate
+        );
 
   async function handleCreateHousehold(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const name = newHouseholdName.trim();
     if (!name || membership) return; // already in a household
-  
-    // create returns { data, errors }
+
     const { data: created, errors } = await client.models.Household.create({
       name,
     });
-  
+
     if (!created) {
       console.error("Failed to create household", errors);
       return;
+    }
+
+    await client.models.HouseholdMembership.create({
+      householdId: created.id,
+    });
+
+    setNewHouseholdName("");
   }
-
-  // link this user to that household
-  await client.models.HouseholdMembership.create({
-    householdId: created.id,
-  });
-
-  setNewHouseholdName("");
-}
-
 
   async function handleJoinHousehold(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (membership) return; // already in one household
+    if (membership) return;
     if (!householdToJoinId) return;
 
     await client.models.HouseholdMembership.create({
@@ -909,55 +873,20 @@ function HouseholdPage() {
     setHouseholdToJoinId("");
   }
 
-  async function handleCreateHouseholdProject(e?: React.FormEvent) {
+  async function handleAddTaskForDate(e?: React.FormEvent) {
     if (e) e.preventDefault();
     if (!currentHouseholdId) return;
-    const name = newHouseholdProjectName.trim();
-    if (!name) return;
-
-    await client.models.HouseholdProject.create({
-      householdId: currentHouseholdId,
-      name,
-    });
-
-    setNewHouseholdProjectName("");
-  }
-
-  async function createHouseholdTask(
-    content: string,
-    options?: { prefix?: string }
-  ) {
-    if (!currentHouseholdId) return;
-    const trimmed = content.trim();
-    if (!trimmed) return;
-
-    const finalContent = options?.prefix
-      ? `${options.prefix}${trimmed}`
-      : trimmed;
+    const content = newTaskForDate.trim();
+    if (!content) return;
 
     await client.models.HouseholdTask.create({
       householdId: currentHouseholdId,
-      content: finalContent,
+      content,
       completed: false,
+      scheduledFor: selectedDate,
     });
-  }
 
-  async function handleCreateGeneralTask(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    await createHouseholdTask(newGeneralTask);
-    setNewGeneralTask("");
-  }
-
-  async function handleAddGroceryItem(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    await createHouseholdTask(newGroceryItem, { prefix: groceryPrefix });
-    setNewGroceryItem("");
-  }
-
-  async function handleAddDinnerItem(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    await createHouseholdTask(newDinnerItem, { prefix: dinnerPrefix });
-    setNewDinnerItem("");
+    setNewTaskForDate("");
   }
 
   async function toggleTaskCompleted(task: Schema["HouseholdTask"]["type"]) {
@@ -975,11 +904,12 @@ function HouseholdPage() {
     <main>
       <h1>Household</h1>
 
+      {/* If user has no household: show create / join options */}
       {!membership && (
         <section style={{ marginBottom: "2rem" }}>
           <p>
-            You are not part of a household yet. You can create a new household
-            or join an existing one.
+            You are not part of a household yet. Create one or join an existing
+            one.
           </p>
 
           <div
@@ -1046,67 +976,83 @@ function HouseholdPage() {
         </section>
       )}
 
+      {/* If user is in a household: show calendar + nav buttons */}
       {membership && currentHousehold && (
         <>
-          <section style={{ marginBottom: "2rem" }}>
+          <section style={{ marginBottom: "1.5rem" }}>
             <h2>Your household: {currentHousehold.name}</h2>
-            <p>
-              All members of this household can collaborate on projects, tasks,
-              and shared lists below.
-            </p>
+
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "0.75rem",
+                marginTop: "0.75rem",
+              }}
+            >
+              <Link to="/household/projects">
+                <button type="button">Household Projects</button>
+              </Link>
+              <Link to="/household/grocery">
+                <button type="button">Grocery &amp; Dinner</button>
+              </Link>
+              <Link to="/household/news">
+                <button type="button">Family News</button>
+              </Link>
+            </div>
           </section>
 
-          {/* Household projects */}
-          <section style={{ marginBottom: "2rem" }}>
-            <h3>Household Projects</h3>
-            <form onSubmit={handleCreateHouseholdProject}>
+          {/* Task calendar */}
+          <section>
+            <h3>Task calendar</h3>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: "0.75rem",
+                marginBottom: "1rem",
+              }}
+            >
+              <label>
+                Date:&nbsp;
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <form
+              onSubmit={handleAddTaskForDate}
+              style={{ marginBottom: "1rem" }}
+            >
               <input
                 type="text"
-                placeholder="New household project"
-                value={newHouseholdProjectName}
-                onChange={(e) => setNewHouseholdProjectName(e.target.value)}
-                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
-              />
-              <button type="submit">Add project</button>
-            </form>
-
-            {currentHouseholdProjects.length === 0 ? (
-              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
-                No household projects yet.
-              </p>
-            ) : (
-              <ul style={{ marginTop: "0.75rem" }}>
-                {currentHouseholdProjects.map((p) => (
-                  <li key={p.id}>• {p.name}</li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* General household tasks */}
-          <section style={{ marginBottom: "2rem" }}>
-            <h3>Household Tasks</h3>
-            <form onSubmit={handleCreateGeneralTask}>
-              <input
-                type="text"
-                placeholder="New household task"
-                value={newGeneralTask}
-                onChange={(e) => setNewGeneralTask(e.target.value)}
+                placeholder="Task for this day"
+                value={newTaskForDate}
+                onChange={(e) => setNewTaskForDate(e.target.value)}
                 style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
               />
               <button type="submit">Add task</button>
             </form>
 
-            {generalTasks.length === 0 ? (
-              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
-                No general tasks yet.
+            {tasksForSelectedDate.length === 0 ? (
+              <p style={{ color: "#888", fontStyle: "italic" }}>
+                No tasks scheduled for this day.
               </p>
             ) : (
-              <ul style={{ marginTop: "0.75rem" }}>
-                {generalTasks.map((t) => (
+              <ul>
+                {tasksForSelectedDate.map((t) => (
                   <li
                     key={t.id}
-                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem",
+                      marginBottom: "0.25rem",
+                    }}
                   >
                     <input
                       type="checkbox"
@@ -1131,104 +1077,6 @@ function HouseholdPage() {
               </ul>
             )}
           </section>
-
-          {/* Grocery list */}
-          <section style={{ marginBottom: "2rem" }}>
-            <h3>Grocery List</h3>
-            <form onSubmit={handleAddGroceryItem}>
-              <input
-                type="text"
-                placeholder="Add grocery item"
-                value={newGroceryItem}
-                onChange={(e) => setNewGroceryItem(e.target.value)}
-                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
-              />
-              <button type="submit">Add item</button>
-            </form>
-
-            {groceryItems.length === 0 ? (
-              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
-                No grocery items yet.
-              </p>
-            ) : (
-              <ul style={{ marginTop: "0.75rem" }}>
-                {groceryItems.map((t) => (
-                  <li
-                    key={t.id}
-                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!t.completed}
-                      onChange={() => toggleTaskCompleted(t)}
-                    />
-                    <span
-                      style={{
-                        textDecoration: t.completed ? "line-through" : "none",
-                      }}
-                    >
-                      {stripPrefix(t.content, groceryPrefix)}
-                    </span>
-                    <button
-                      onClick={() => deleteTask(t.id)}
-                      style={{ fontSize: "0.75rem", marginLeft: "0.5rem" }}
-                    >
-                      delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          {/* Dinner list */}
-          <section style={{ marginBottom: "2rem" }}>
-            <h3>Dinner List</h3>
-            <form onSubmit={handleAddDinnerItem}>
-              <input
-                type="text"
-                placeholder="Add dinner item"
-                value={newDinnerItem}
-                onChange={(e) => setNewDinnerItem(e.target.value)}
-                style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
-              />
-              <button type="submit">Add item</button>
-            </form>
-
-            {dinnerItems.length === 0 ? (
-              <p style={{ color: "#888", fontStyle: "italic", marginTop: "0.5rem" }}>
-                No dinner items yet.
-              </p>
-            ) : (
-              <ul style={{ marginTop: "0.75rem" }}>
-                {dinnerItems.map((t) => (
-                  <li
-                    key={t.id}
-                    style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!t.completed}
-                      onChange={() => toggleTaskCompleted(t)}
-                    />
-                    <span
-                      style={{
-                        textDecoration: t.completed ? "line-through" : "none",
-                      }}
-                    >
-                      {stripPrefix(t.content, dinnerPrefix)}
-                    </span>
-                    <button
-                      onClick={() => deleteTask(t.id)}
-                      style={{ fontSize: "0.75rem", marginLeft: "0.5rem" }}
-                    >
-                      delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
         </>
       )}
 
@@ -1241,6 +1089,7 @@ function HouseholdPage() {
     </main>
   );
 }
+
 
 /* ===================== SIMPLE EXTRA PAGES ===================== */
 
