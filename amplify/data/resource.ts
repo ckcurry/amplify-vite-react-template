@@ -72,15 +72,6 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()]),
 
-  HouseholdTask: a
-    .model({
-      householdId: a.id().required(),
-      household: a.belongsTo("Household", "householdId"),
-      content: a.string().required(),
-      completed: a.boolean().default(false),
-    })
-    .authorization((allow) => [allow.authenticated()]),
-
   // 🔹 NEW: household project milestones
   HouseholdMilestone: a
     .model({
