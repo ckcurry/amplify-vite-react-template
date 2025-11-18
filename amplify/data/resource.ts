@@ -42,9 +42,15 @@ const schema = a.schema({
     .authorization((allow) => [allow.owner()]),
 
   Household: a
-  .model({
+    .model({
     name: a.string().required(),
-    // you could add fields like "inviteCode" later
+
+    // 🔹 THIS is the part the error is asking for:
+    memberships: a.hasMany("HouseholdMembership", "householdId"),
+
+    // optional but nice: see all projects/tasks for this household
+    projects: a.hasMany("HouseholdProject", "householdId"),
+    tasks: a.hasMany("HouseholdTask", "householdId"),
   })
   // All signed-in users can see households; we’ll restrict who can “join”
   .authorization((allow) => [allow.authenticated()]),
