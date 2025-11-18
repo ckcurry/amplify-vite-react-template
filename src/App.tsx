@@ -878,15 +878,25 @@ function HouseholdPage() {
     if (e) e.preventDefault();
     const name = newHouseholdName.trim();
     if (!name || membership) return; // already in a household
-
-    const created = await client.models.Household.create({ name });
-    // link this user to that household
-    await client.models.HouseholdMembership.create({
-      householdId: created.id,
+  
+    // create returns { data, errors }
+    const { data: created, errors } = await client.models.Household.create({
+      name,
     });
-
-    setNewHouseholdName("");
+  
+    if (!created) {
+      console.error("Failed to create household", errors);
+      return;
   }
+
+  // link this user to that household
+  await client.models.HouseholdMembership.create({
+    householdId: created.id,
+  });
+
+  setNewHouseholdName("");
+}
+
 
   async function handleJoinHousehold(e?: React.FormEvent) {
     if (e) e.preventDefault();
