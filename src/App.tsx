@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import type { Schema } from "../amplify/data/resource";
-import { uploadData } from "aws-amplify/storage";
+import { uploadData, getUrl } from "aws-amplify/storage";
 import { generateClient } from "aws-amplify/data";
 
 const client = generateClient<Schema>();
 
 function App() {
+  const [updateVideoUrls, setUpdateVideoUrls] = useState<Record<string, string>>(
+    {}
+  );
+
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
-  const [milestones, setMilestones] = useState<Array<Schema["Milestone"]["type"]>>([]);
-  const [updates, setUpdates] = useState<Array<Schema["MilestoneUpdate"]["type"]>>([]);
+  const [milestones, setMilestones] = useState<
+    Array<Schema["Milestone"]["type"]>
+  >([]);
+  const [updates, setUpdates] = useState<
+    Array<Schema["MilestoneUpdate"]["type"]>
+  >([]);
 
   // Todo dialog
   const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
@@ -32,11 +40,10 @@ function App() {
     useState<string | null>(null);
   const [newUpdateNote, setNewUpdateNote] = useState("");
 
-  // ⭐ NEW: video file + error + uploading state
+  // video file + error + uploading state
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
-
 
   // 3 active task slots (Todo IDs)
   const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
@@ -47,6 +54,7 @@ function App() {
 
   const { signOut } = useAuthenticator();
 
+  // subscribe to data
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
       next: (data) => setTodos([...data.items]),
@@ -71,6 +79,63 @@ function App() {
       updateSub.unsubscribe();
     };
   }, []);
+
+  // load signed URLs for each update video
+  useEffect(() => {
+    if (updates.length === 0) return;
+
+    let cancelled = false;
+
+    async function loadUrls() {
+      const entries: [string, string][] = [];
+
+      for (const update of updates) {
+        // skip if we already have a URL or there's no video path
+        if (!update.videoUrl || updateVideoUrls[update.id]) continue;
+
+        try {
+          const { url } = await getUrl({ path: update.videoUrl });
+          if (!cancelled) {
+            entries.push([update.id, url.href]);
+          }
+        } catch (err) {
+          console.error("Failed to get URL for update", update.id, err);
+        }
+      }
+
+      if (!cancelled && entries.length > 0) {
+        setUpdateVideoUrls((prev) => ({
+          ...prev,
+          ...Object.fromEntries(entries),
+        }));
+      }
+    }
+
+    loadUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [updates, updateVideoUrls]);
+
+  // ===== helper: video duration =====
+  async function getVideoDurationInSeconds(file: File): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(video.duration);
+      };
+
+      video.onerror = () => {
+        reject(new Error("Failed to load video metadata"));
+      };
+
+      video.src = URL.createObjectURL(file);
+    });
+  }
 
   // ===== TODOS =====
   function openTodoDialog() {
@@ -114,25 +179,6 @@ function App() {
   function closeProjectDialog() {
     setIsProjectDialogOpen(false);
   }
-
-  async function getVideoDurationInSeconds(file: File): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const video = document.createElement("video");
-    video.preload = "metadata";
-
-    video.onloadedmetadata = () => {
-      window.URL.revokeObjectURL(video.src);
-      resolve(video.duration);
-    };
-
-    video.onerror = (_e) => {
-      reject(new Error("Failed to load video metadata"));
-    };
-
-    video.src = URL.createObjectURL(file);
-  });
-}
-
 
   async function handleCreateProject(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -183,7 +229,7 @@ function App() {
     setSelectedVideoFile(null);
     setUpdateError(null);
     setIsUpdateDialogOpen(true);
-  }  
+  }
 
   function closeUpdateDialog() {
     setIsUpdateDialogOpen(false);
@@ -192,64 +238,63 @@ function App() {
     setUpdateError(null);
   }
 
+  async function handleCreateUpdate(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!selectedMilestoneIdForUpdate) return;
 
-async function handleCreateUpdate(e?: React.FormEvent) {
-  if (e) e.preventDefault();
-  if (!selectedMilestoneIdForUpdate) return;
+    setUpdateError(null);
 
-  setUpdateError(null);
-
-  if (!selectedVideoFile) {
-    setUpdateError("Please select a video file.");
-    return;
-  }
-
-  try {
-    setIsUploadingUpdate(true);
-
-    // ⏱ check duration <= 60s
-    const durationSeconds = await getVideoDurationInSeconds(selectedVideoFile);
-    if (durationSeconds > 60) {
-      setIsUploadingUpdate(false);
-      setUpdateError("Video must be 60 seconds or less.");
+    if (!selectedVideoFile) {
+      setUpdateError("Please select a video file.");
       return;
     }
 
-    // ✅ use `path`, and keep it under milestone-updates/*
-    const path = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${selectedVideoFile.name}`;
+    try {
+      setIsUploadingUpdate(true);
 
-    const result = await uploadData({
-      path,
-      data: selectedVideoFile,
-      options: {
-        contentType: selectedVideoFile.type,
-      },
-    }).result;
+      // check duration <= 60s
+      const durationSeconds = await getVideoDurationInSeconds(selectedVideoFile);
+      if (durationSeconds > 60) {
+        setIsUploadingUpdate(false);
+        setUpdateError("Video must be 60 seconds or less.");
+        return;
+      }
 
-    const note = newUpdateNote.trim();
+      // path under milestone-updates/*
+      const path = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${selectedVideoFile.name}`;
 
-    await client.models.MilestoneUpdate.create({
-      milestoneId: selectedMilestoneIdForUpdate,
-      note,
-      videoUrl: result?.path ?? path,   // store the Storage path
-      durationSeconds: Math.round(durationSeconds),
-    });
+      const result = await uploadData({
+        path,
+        data: selectedVideoFile,
+        options: {
+          contentType: selectedVideoFile.type,
+        },
+      }).result;
 
-    setNewUpdateNote("");
-    setSelectedVideoFile(null);
-    setIsUpdateDialogOpen(false);
-    setSelectedMilestoneIdForUpdate(null);
-  } catch (err) {
-    console.error("Upload failed:", err);
-    // show the real error so we can see what's happening
-    setUpdateError(
-      err instanceof Error ? err.message : "Something went wrong uploading the video."
-    );
-  } finally {
-    setIsUploadingUpdate(false);
+      const note = newUpdateNote.trim();
+
+      await client.models.MilestoneUpdate.create({
+        milestoneId: selectedMilestoneIdForUpdate,
+        note,
+        videoUrl: result?.path ?? path,
+        durationSeconds: Math.round(durationSeconds),
+      });
+
+      setNewUpdateNote("");
+      setSelectedVideoFile(null);
+      setIsUpdateDialogOpen(false);
+      setSelectedMilestoneIdForUpdate(null);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setUpdateError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong uploading the video."
+      );
+    } finally {
+      setIsUploadingUpdate(false);
+    }
   }
-}
-
 
   async function deleteUpdate(id: string) {
     await client.models.MilestoneUpdate.delete({ id });
@@ -385,7 +430,6 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                               }}
                             >
                               <span>• {milestone.title}</span>
-                              {/* ⭐ Add update button per milestone */}
                               <div style={{ display: "flex", gap: "0.5rem" }}>
                                 <button
                                   onClick={() => openUpdateDialog(milestone.id)}
@@ -408,16 +452,68 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                                   marginTop: "0.25rem",
                                 }}
                               >
-                                {milestoneUpdates.map((update) => (
-                                  <li
-                                    key={update.id}
-                                    style={{ cursor: "pointer" }}
-                                    title="Click to delete update"
-                                    onClick={() => deleteUpdate(update.id)}
-                                  >
-                                    - {update.note || "Video update"}
-                                  </li>
-                                ))}
+                                {milestoneUpdates.map((update) => {
+                                  const videoSrc =
+                                    updateVideoUrls[update.id];
+
+                                  return (
+                                    <li
+                                      key={update.id}
+                                      style={{
+                                        marginTop: "0.35rem",
+                                        padding: "0.25rem 0",
+                                        borderBottom: "1px solid #eee",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          gap: "0.5rem",
+                                        }}
+                                      >
+                                        <div>
+                                          <div style={{ fontSize: "0.9rem" }}>
+                                            {update.note || "Video update"}
+                                          </div>
+
+                                          {videoSrc ? (
+                                            <video
+                                              src={videoSrc}
+                                              controls
+                                              style={{
+                                                marginTop: "0.25rem",
+                                                maxWidth: "100%",
+                                                maxHeight: "200px",
+                                                borderRadius: "0.25rem",
+                                              }}
+                                            />
+                                          ) : (
+                                            <div
+                                              style={{
+                                                marginTop: "0.25rem",
+                                                fontSize: "0.8rem",
+                                                color: "#888",
+                                              }}
+                                            >
+                                              Loading video…
+                                            </div>
+                                          )}
+                                        </div>
+
+                                        <button
+                                          onClick={() =>
+                                            deleteUpdate(update.id)
+                                          }
+                                          style={{ fontSize: "0.8rem" }}
+                                        >
+                                          delete
+                                        </button>
+                                      </div>
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             )}
                           </li>
@@ -433,7 +529,8 @@ async function handleCreateUpdate(e?: React.FormEvent) {
       </section>
 
       <div>
-        🥳 App successfully hosted. Try creating projects, milestones, and updates.
+        🥳 App successfully hosted. Try creating projects, milestones, and
+        updates.
         <br />
         <a href="https://docs.amplify.aws/react/start/quickstart/#make-frontend-updates">
           Review next step of this tutorial.
@@ -627,7 +724,6 @@ async function handleCreateUpdate(e?: React.FormEvent) {
               <input
                 type="file"
                 accept="video/*"
-                // capture hints camera on mobile browsers
                 capture="user"
                 onChange={(e) => {
                   const file = e.target.files?.[0] || null;
@@ -636,7 +732,7 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                 }}
                 style={{ marginBottom: "1rem", width: "100%" }}
               />
-      
+
               {/* optional note */}
               <textarea
                 placeholder="Optional note about this update"
@@ -649,7 +745,7 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                   resize: "vertical",
                 }}
               />
-      
+
               {updateError && (
                 <div
                   style={{
@@ -661,7 +757,7 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                   {updateError}
                 </div>
               )}
-      
+
               <div
                 style={{
                   display: "flex",
@@ -669,7 +765,11 @@ async function handleCreateUpdate(e?: React.FormEvent) {
                   justifyContent: "flex-end",
                 }}
               >
-                <button type="button" onClick={closeUpdateDialog} disabled={isUploadingUpdate}>
+                <button
+                  type="button"
+                  onClick={closeUpdateDialog}
+                  disabled={isUploadingUpdate}
+                >
                   Cancel
                 </button>
                 <button type="submit" disabled={isUploadingUpdate}>
@@ -680,7 +780,6 @@ async function handleCreateUpdate(e?: React.FormEvent) {
           </div>
         </div>
       )}
-
     </main>
   );
 }
