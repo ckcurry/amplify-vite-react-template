@@ -1,55 +1,26 @@
+// src/App.tsx
 import { useState } from "react";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+
+// your pages
 import { Dashboard } from "./pages/Dashboard";
 import { HouseholdHome } from "./pages/HouseholdHome";
 import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
 import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
 import { FamilyNewsPage } from "./pages/FamilyNewsPage";
 
-
-function Page2() {
-  return (
-    <main>
-      <h1>Page 2</h1>
-      <p>Custom content for page 2.</p>
-    </main>
-  );
-}
-
-function Page3() {
-  return (
-    <main>
-      <h1>Page 3</h1>
-      <p>Custom content for page 3.</p>
-    </main>
-  );
-}
-
-function Page4() {
-  return (
-    <main>
-      <h1>Page 4</h1>
-      <p>Custom content for page 4.</p>
-    </main>
-  );
-}
-
-function Page5() {
-  return (
-    <main>
-      <h1>Page 5</h1>
-      <p>Custom content for page 5.</p>
-    </main>
-  );
-}
-
-/* ===================== APP SHELL WITH MENU BUTTON ===================== */
-
-function App() {
+function AppInner() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <BrowserRouter>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* HEADER WITH NAME + MENU */}
       <header
         style={{
           display: "flex",
@@ -57,10 +28,21 @@ function App() {
           justifyContent: "space-between",
           padding: "0.75rem 1rem",
           borderBottom: "1px solid #ddd",
-          marginBottom: "1rem",
+          background: "#f9fafb",
+          position: "sticky",
+          top: 0,
+          zIndex: 100,
         }}
       >
-        <span style={{ fontWeight: "bold" }}>My App</span>
+        <span
+          style={{
+            fontWeight: "bold",
+            fontSize: "1.1rem",
+            whiteSpace: "nowrap",
+          }}
+        >
+          Project by Smallworld
+        </span>
 
         <div style={{ position: "relative" }}>
           <button
@@ -80,11 +62,17 @@ function App() {
                 border: "1px solid #ddd",
                 borderRadius: "0.5rem",
                 boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                minWidth: "180px",
-                zIndex: 1000,
+                minWidth: "200px",
+                zIndex: 200,
               }}
             >
-              <ul style={{ listStyle: "none", padding: "0.5rem", margin: 0 }}>
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: "0.5rem",
+                  margin: 0,
+                }}
+              >
                 <li>
                   <Link
                     to="/"
@@ -105,38 +93,29 @@ function App() {
                 </li>
                 <li>
                   <Link
-                    to="/page2"
+                    to="/household-projects"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Page 2
+                    Household Projects
                   </Link>
                 </li>
                 <li>
                   <Link
-                    to="/page3"
+                    to="/household-grocery"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Page 3
+                    Grocery & Dinner
                   </Link>
                 </li>
                 <li>
                   <Link
-                    to="/page4"
+                    to="/family-news"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Page 4
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/page5"
-                    onClick={() => setMenuOpen(false)}
-                    style={{ display: "block", padding: "0.25rem 0" }}
-                  >
-                    Page 5
+                    Family News
                   </Link>
                 </li>
               </ul>
@@ -145,21 +124,30 @@ function App() {
         </div>
       </header>
 
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/household" element={<HouseholdHome />} />
-        <Route path="/household/projects" element={<HouseholdProjectsPage />} />
-        <Route path="/household/grocery" element={<HouseholdGroceryPage />} />
-        <Route path="/household/news" element={<FamilyNewsPage />} />
-        {/* your other pages */}
-        <Route path="/page2" element={<Page2 />} />
-        <Route path="/page3" element={<Page3 />} />
-        <Route path="/page4" element={<Page4 />} />
-        <Route path="/page5" element={<Page5 />} />
-      </Routes>
-
-    </BrowserRouter>
+      {/* MAIN ROUTED CONTENT */}
+      <div style={{ flex: 1 }}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/household" element={<HouseholdHome />} />
+          <Route
+            path="/household-projects"
+            element={<HouseholdProjectsPage />}
+          />
+          <Route
+            path="/household-grocery"
+            element={<HouseholdGroceryPage />}
+          />
+          <Route path="/family-news" element={<FamilyNewsPage />} />
+        </Routes>
+      </div>
+    </div>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppInner />
+    </BrowserRouter>
+  );
+}
