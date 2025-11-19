@@ -54,19 +54,17 @@ const schema = a.schema({
 
   HouseholdTask: a
     .model({
-      householdId: a.id().required(),
+      id: a.id().required(),
+      householdId: a.string().required(),
       content: a.string().required(),
       completed: a.boolean().required(),
       scheduledFor: a.date().required(),
-  
-      // NEW FIELDS:
-      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"], {
-        default: "NONE",
-      }),
 
-      recurrenceEndDate: a.date(),
-  
-      household: a.belongsTo("Household", "householdId"),
+      // 1) enum with NO default here – just the enum values:
+      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
+
+      // 2) optional end date: use nullable() instead of .optional()
+      recurrenceEndDate: a.date().nullable(),
     })
     .authorization((allow) => [allow.owner()]),
 
