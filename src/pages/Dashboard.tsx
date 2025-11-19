@@ -1,10 +1,11 @@
+// src/pages/Dashboard.tsx
 import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { uploadData, getUrl } from "aws-amplify/storage";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
-/* ===================== DASHBOARD (your existing app) ===================== */
+/* ===================== DASHBOARD ===================== */
 
 export function Dashboard() {
   const [updateVideoUrls, setUpdateVideoUrls] = useState<Record<string, string>>(
@@ -52,27 +53,27 @@ export function Dashboard() {
     null,
   ]);
 
-  const { signOut } = useAuthenticator();
-
-    // Active project for the dashboard
+  // Active project for the dashboard
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  const { signOut } = useAuthenticator();
 
   // subscribe to data
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
-      next: (data) => setTodos([...data.items]),
+      next: (data: any) => setTodos([...data.items]),
     });
 
     const projectSub = client.models.Project.observeQuery().subscribe({
-      next: (data) => setProjects([...data.items]),
+      next: (data: any) => setProjects([...data.items]),
     });
 
     const milestoneSub = client.models.Milestone.observeQuery().subscribe({
-      next: (data) => setMilestones([...data.items]),
+      next: (data: any) => setMilestones([...data.items]),
     });
 
     const updateSub = client.models.MilestoneUpdate.observeQuery().subscribe({
-      next: (data) => setUpdates([...data.items]),
+      next: (data: any) => setUpdates([...data.items]),
     });
 
     return () => {
@@ -83,7 +84,7 @@ export function Dashboard() {
     };
   }, []);
 
-    // Load active project from localStorage on first render
+  // Load active project from localStorage on first render
   useEffect(() => {
     const stored = window.localStorage.getItem("activeProjectId");
     if (stored) {
@@ -99,7 +100,6 @@ export function Dashboard() {
       window.localStorage.removeItem("activeProjectId");
     }
   }, [activeProjectId]);
-
 
   // load signed URLs for each update video
   useEffect(() => {
@@ -318,6 +318,7 @@ export function Dashboard() {
     await client.models.MilestoneUpdate.delete({ id });
   }
 
+  // ===== ACTIVE PROJECT DERIVED DATA =====
   const activeProject =
     activeProjectId != null
       ? projects.find((p) => p.id === activeProjectId) ?? null
@@ -327,19 +328,36 @@ export function Dashboard() {
     ? milestones.filter((m) => m.projectId === activeProject.id)
     : [];
 
-  {/* const activeProjectUpdates = activeProject
-    ? updates.filter((u) =>
-        activeProjectMilestones.some((m) => m.id === u.milestoneId)
-      )
-    : []; */}
-
-
   return (
-    <main>
-      <h1>Project by Smallworld</h1>
+    <main
+      style={{
+        maxWidth: "960px",
+        margin: "0 auto",
+        padding: "1rem",
+        boxSizing: "border-box",
+        minHeight: "100vh",
+      }}
+    >
+      <h1
+        style={{
+          fontSize: "1.75rem",
+          marginBottom: "1rem",
+          textAlign: "center",
+          wordBreak: "break-word",
+        }}
+      >
+        Project by Smallworld
+      </h1>
 
       {/* Top buttons */}
-      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.5rem",
+          marginBottom: "1rem",
+        }}
+      >
         <button onClick={openTodoDialog}>+ new task</button>
         <button onClick={openProjectDialog}>+ new project</button>
       </div>
@@ -350,7 +368,7 @@ export function Dashboard() {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
             gap: "1rem",
           }}
         >
@@ -364,13 +382,18 @@ export function Dashboard() {
                   borderRadius: "0.5rem",
                   padding: "1rem",
                   minHeight: "120px",
+                  boxSizing: "border-box",
                 }}
               >
                 <h3>Slot {index + 1}</h3>
                 <select
                   value={slotTodoId ?? ""}
                   onChange={(e) => handleSlotChange(index, e.target.value)}
-                  style={{ width: "100%", marginBottom: "0.75rem" }}
+                  style={{
+                    width: "100%",
+                    marginBottom: "0.75rem",
+                    maxWidth: "100%",
+                  }}
                 >
                   <option value="">-- Select a task --</option>
                   {todos.map((t) => (
@@ -387,6 +410,7 @@ export function Dashboard() {
                       padding: "0.5rem",
                       borderRadius: "0.25rem",
                       cursor: "pointer",
+                      wordBreak: "break-word",
                     }}
                     onClick={() => deleteTodo(todo.id)}
                     title="Click to delete this task"
@@ -416,10 +440,12 @@ export function Dashboard() {
           <>
             <select
               value={activeProjectId ?? ""}
-              onChange={(e) =>
-                setActiveProjectId(e.target.value || null)
-              }
-              style={{ width: "100%", maxWidth: "400px", marginBottom: "0.75rem" }}
+              onChange={(e) => setActiveProjectId(e.target.value || null)}
+              style={{
+                width: "100%",
+                maxWidth: "400px",
+                marginBottom: "0.75rem",
+              }}
             >
               <option value="">-- Select active project --</option>
               {projects.map((p) => (
@@ -436,9 +462,12 @@ export function Dashboard() {
                   borderRadius: "0.5rem",
                   padding: "1rem",
                   marginTop: "0.5rem",
+                  boxSizing: "border-box",
                 }}
               >
-                <h3 style={{ marginTop: 0 }}>{activeProject.name}</h3>
+                <h3 style={{ marginTop: 0, wordBreak: "break-word" }}>
+                  {activeProject.name}
+                </h3>
 
                 {activeProjectMilestones.length === 0 ? (
                   <p style={{ color: "#888", fontStyle: "italic" }}>
@@ -482,17 +511,22 @@ export function Dashboard() {
                     borderRadius: "0.5rem",
                     padding: "1rem",
                     marginBottom: "0.75rem",
+                    boxSizing: "border-box",
                   }}
                 >
                   <div
                     style={{
                       display: "flex",
+                      flexWrap: "wrap",
                       justifyContent: "space-between",
                       alignItems: "center",
+                      gap: "0.5rem",
                       marginBottom: "0.5rem",
                     }}
                   >
-                    <strong>{project.name}</strong>
+                    <strong style={{ wordBreak: "break-word" }}>
+                      {project.name}
+                    </strong>
                     <button onClick={() => openMilestoneDialog(project.id)}>
                       + add milestone
                     </button>
@@ -516,12 +550,20 @@ export function Dashboard() {
                             <div
                               style={{
                                 display: "flex",
+                                flexWrap: "wrap",
                                 justifyContent: "space-between",
                                 alignItems: "center",
+                                gap: "0.5rem",
                               }}
                             >
                               <span>• {milestone.title}</span>
-                              <div style={{ display: "flex", gap: "0.5rem" }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "0.5rem",
+                                }}
+                              >
                                 <button
                                   onClick={() => openUpdateDialog(milestone.id)}
                                 >
@@ -544,8 +586,7 @@ export function Dashboard() {
                                 }}
                               >
                                 {milestoneUpdates.map((update) => {
-                                  const videoSrc =
-                                    updateVideoUrls[update.id];
+                                  const videoSrc = updateVideoUrls[update.id];
 
                                   return (
                                     <li
@@ -559,48 +600,53 @@ export function Dashboard() {
                                       <div
                                         style={{
                                           display: "flex",
-                                          justifyContent: "space-between",
-                                          alignItems: "center",
-                                          gap: "0.5rem",
+                                          flexDirection: "column",
+                                          gap: "0.25rem",
                                         }}
                                       >
-                                        <div>
-                                          <div style={{ fontSize: "0.9rem" }}>
-                                            {update.note || "Video update"}
-                                          </div>
-
-                                          {videoSrc ? (
-                                            <video
-                                              src={videoSrc}
-                                              controls
-                                              style={{
-                                                marginTop: "0.25rem",
-                                                maxWidth: "100%",
-                                                maxHeight: "200px",
-                                                borderRadius: "0.25rem",
-                                              }}
-                                            />
-                                          ) : (
-                                            <div
-                                              style={{
-                                                marginTop: "0.25rem",
-                                                fontSize: "0.8rem",
-                                                color: "#888",
-                                              }}
-                                            >
-                                              Loading video…
-                                            </div>
-                                          )}
+                                        <div style={{ fontSize: "0.9rem" }}>
+                                          {update.note || "Video update"}
                                         </div>
 
-                                        <button
-                                          onClick={() =>
-                                            deleteUpdate(update.id)
-                                          }
-                                          style={{ fontSize: "0.8rem" }}
+                                        {videoSrc ? (
+                                          <video
+                                            src={videoSrc}
+                                            controls
+                                            style={{
+                                              marginTop: "0.25rem",
+                                              maxWidth: "100%",
+                                              height: "auto",
+                                              maxHeight: "220px",
+                                              borderRadius: "0.25rem",
+                                            }}
+                                          />
+                                        ) : (
+                                          <div
+                                            style={{
+                                              marginTop: "0.25rem",
+                                              fontSize: "0.8rem",
+                                              color: "#888",
+                                            }}
+                                          >
+                                            Loading video…
+                                          </div>
+                                        )}
+
+                                        <div
+                                          style={{
+                                            display: "flex",
+                                            justifyContent: "flex-end",
+                                          }}
                                         >
-                                          delete
-                                        </button>
+                                          <button
+                                            onClick={() =>
+                                              deleteUpdate(update.id)
+                                            }
+                                            style={{ fontSize: "0.8rem" }}
+                                          >
+                                            delete
+                                          </button>
+                                        </div>
                                       </div>
                                     </li>
                                   );
@@ -619,7 +665,6 @@ export function Dashboard() {
         )}
       </section>
 
-
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
       </button>
@@ -635,6 +680,8 @@ export function Dashboard() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
           }}
           onClick={closeTodoDialog}
         >
@@ -643,8 +690,12 @@ export function Dashboard() {
               background: "white",
               padding: "1.5rem",
               borderRadius: "0.5rem",
-              minWidth: "300px",
+              width: "100%",
+              maxWidth: "420px",
+              maxHeight: "90vh",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -662,6 +713,7 @@ export function Dashboard() {
                   display: "flex",
                   gap: "0.5rem",
                   justifyContent: "flex-end",
+                  flexWrap: "wrap",
                 }}
               >
                 <button type="button" onClick={closeTodoDialog}>
@@ -685,6 +737,8 @@ export function Dashboard() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
           }}
           onClick={closeProjectDialog}
         >
@@ -693,8 +747,12 @@ export function Dashboard() {
               background: "white",
               padding: "1.5rem",
               borderRadius: "0.5rem",
-              minWidth: "300px",
+              width: "100%",
+              maxWidth: "420px",
+              maxHeight: "90vh",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -712,6 +770,7 @@ export function Dashboard() {
                   display: "flex",
                   gap: "0.5rem",
                   justifyContent: "flex-end",
+                  flexWrap: "wrap",
                 }}
               >
                 <button type="button" onClick={closeProjectDialog}>
@@ -735,6 +794,8 @@ export function Dashboard() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
           }}
           onClick={closeMilestoneDialog}
         >
@@ -743,8 +804,12 @@ export function Dashboard() {
               background: "white",
               padding: "1.5rem",
               borderRadius: "0.5rem",
-              minWidth: "300px",
+              width: "100%",
+              maxWidth: "420px",
+              maxHeight: "90vh",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -762,6 +827,7 @@ export function Dashboard() {
                   display: "flex",
                   gap: "0.5rem",
                   justifyContent: "flex-end",
+                  flexWrap: "wrap",
                 }}
               >
                 <button type="button" onClick={closeMilestoneDialog}>
@@ -785,6 +851,8 @@ export function Dashboard() {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
           }}
           onClick={closeUpdateDialog}
         >
@@ -793,8 +861,12 @@ export function Dashboard() {
               background: "white",
               padding: "1.5rem",
               borderRadius: "0.5rem",
-              minWidth: "320px",
+              width: "100%",
+              maxWidth: "440px",
+              maxHeight: "90vh",
+              overflowY: "auto",
               boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -844,6 +916,7 @@ export function Dashboard() {
                   display: "flex",
                   gap: "0.5rem",
                   justifyContent: "flex-end",
+                  flexWrap: "wrap",
                 }}
               >
                 <button
