@@ -327,11 +327,11 @@ export function Dashboard() {
     ? milestones.filter((m) => m.projectId === activeProject.id)
     : [];
 
-  const activeProjectUpdates = activeProject
+  {/* const activeProjectUpdates = activeProject
     ? updates.filter((u) =>
         activeProjectMilestones.some((m) => m.id === u.milestoneId)
       )
-    : [];
+    : []; */}
 
 
   return (
