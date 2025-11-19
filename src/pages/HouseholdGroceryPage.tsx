@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { Schema } from "../../amplify/data/resource";
 import { client } from "../client";
 
-
 export function HouseholdGroceryPage() {
   const [membership, setMembership] =
     useState<Schema["HouseholdMembership"]["type"] | null>(null);
@@ -59,10 +58,15 @@ export function HouseholdGroceryPage() {
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    const today = new Date().toISOString().slice(0, 10);
+
     await client.models.HouseholdTask.create({
       householdId: currentHouseholdId,
       content: `${prefix}${trimmed}`,
       completed: false,
+      scheduledFor: today,        // ✅ required now
+      recurrence: "NONE",         // ✅ explicit one-time
+      recurrenceEndDate: null,    // ✅ optional, but keep type happy
     });
   }
 
@@ -79,7 +83,15 @@ export function HouseholdGroceryPage() {
 
   if (!membership) {
     return (
-      <main>
+      <main
+        style={{
+          maxWidth: "960px",
+          margin: "0 auto",
+          padding: "1rem",
+          boxSizing: "border-box",
+          minHeight: "100vh",
+        }}
+      >
         <h1>Grocery &amp; Dinner</h1>
         <p>You need to be part of a household to use shared lists.</p>
       </main>
@@ -87,7 +99,15 @@ export function HouseholdGroceryPage() {
   }
 
   return (
-    <main>
+    <main
+      style={{
+        maxWidth: "960px",
+        margin: "0 auto",
+        padding: "1rem",
+        boxSizing: "border-box",
+        minHeight: "100vh",
+      }}
+    >
       <h1>Grocery &amp; Dinner</h1>
       <p>
         Everyone in your household can add, check off, and remove items on these
