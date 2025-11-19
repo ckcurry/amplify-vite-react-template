@@ -6,6 +6,8 @@ import type { Schema } from "../../amplify/data/resource";
 
 /* ===================== HOUSEHOLD HOME (calendar + buttons) ===================== */
 
+type RecurrenceType = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+
 export function HouseholdHome() {
   const [households, setHouseholds] =
     useState<Array<Schema["Household"]["type"]>>([]);
@@ -22,6 +24,10 @@ export function HouseholdHome() {
     new Date().toISOString().slice(0, 10)
   );
   const [newTaskForDate, setNewTaskForDate] = useState("");
+
+  // NEW: recurrence controls
+  const [recurrence, setRecurrence] = useState<RecurrenceType>("NONE");
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState("");
 
   // subscribe to household + membership + tasks
   useEffect(() => {
@@ -54,26 +60,68 @@ export function HouseholdHome() {
       ? households.find((h) => h.id === currentHouseholdId) ?? null
       : null;
 
+  // ===== Recurrence logic helper =====
+  function occursOnDate(
+    task: Schema["HouseholdTask"]["type"],
+    dateStr: string
+  ): boolean {
+    if (!task.scheduledFor) return false;
+
+    const base = new Date(task.scheduledFor + "T00:00:00");
+    const target = new Date(dateStr + "T00:00:00");
+
+    if (Number.isNaN(base.getTime()) || Number.isNaN(target.getTime())) {
+      return false;
+    }
+
+    // Only in/after start date
+    if (target < base) return false;
+
+    const rec: RecurrenceType =
+      ((task as any).recurrence as RecurrenceType) ?? "NONE";
+
+    const end = (task as any).recurrenceEndDate
+      ? new Date((task as any).recurrenceEndDate + "T00:00:00")
+      : null;
+    if (end && target > end) return false;
+
+    if (rec === "NONE") {
+      return task.scheduledFor === dateStr;
+    }
+
+    if (rec === "DAILY") {
+      // if we got here, target >= base and <= end (if any)
+      return true;
+    }
+
+    const msPerDay = 1000 * 60 * 60 * 24;
+    const diffDays = Math.round(
+      (target.getTime() - base.getTime()) / msPerDay
+    );
+
+    if (diffDays < 0) return false;
+
+    if (rec === "WEEKLY") {
+      return diffDays % 7 === 0;
+    }
+
+    if (rec === "MONTHLY") {
+      // Simple monthly rule: same day-of-month
+      return base.getDate() === target.getDate();
+    }
+
+    return false;
+  }
+
+  // Tasks that occur (including recurrence) on selectedDate
   const tasksForSelectedDate =
     currentHouseholdId == null
       ? []
       : householdTasks.filter(
           (t) =>
             t.householdId === currentHouseholdId &&
-            t.scheduledFor === selectedDate
+            occursOnDate(t, selectedDate)
         );
-
-  // Map of date -> tasks (for calendar dots)
-  const tasksByDate: Record<string, Array<Schema["HouseholdTask"]["type"]>> = {};
-  if (currentHouseholdId != null) {
-    for (const t of householdTasks) {
-      if (t.householdId !== currentHouseholdId || !t.scheduledFor) continue;
-      if (!tasksByDate[t.scheduledFor]) {
-        tasksByDate[t.scheduledFor] = [];
-      }
-      tasksByDate[t.scheduledFor].push(t);
-    }
-  }
 
   async function handleCreateHousehold(e?: React.FormEvent) {
     if (e) e.preventDefault();
@@ -118,9 +166,14 @@ export function HouseholdHome() {
       content,
       completed: false,
       scheduledFor: selectedDate,
+      // NEW: recurrence fields
+      recurrence,
+      recurrenceEndDate: recurrenceEndDate || null,
     });
 
     setNewTaskForDate("");
+    setRecurrence("NONE");
+    setRecurrenceEndDate("");
   }
 
   async function toggleTaskCompleted(task: Schema["HouseholdTask"]["type"]) {
@@ -147,18 +200,15 @@ export function HouseholdHome() {
   const startWeekday = firstOfMonth.getDay(); // 0 (Sun) - 6 (Sat)
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
 
-  // Build an array of calendar cells (some empty at start)
   const calendarCells: Array<{
     dateString: string | null;
     dayNumber: number | null;
   }> = [];
 
-  // Leading empty cells
   for (let i = 0; i < startWeekday; i++) {
     calendarCells.push({ dateString: null, dayNumber: null });
   }
 
-  // Actual days
   for (let day = 1; day <= daysInMonth; day++) {
     const d = new Date(year, monthIndex, day);
     const iso = d.toISOString().slice(0, 10);
@@ -181,7 +231,6 @@ export function HouseholdHome() {
 
   const weekdaysShort = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Nicely formatted "Tasks for ..." label
   const prettySelected = new Date(selectedDate + "T00:00:00");
   const selectedLabel = prettySelected.toLocaleDateString(undefined, {
     weekday: "short",
@@ -386,7 +435,13 @@ export function HouseholdHome() {
                 }
 
                 const isSelected = cell.dateString === selectedDate;
-                const hasTasks = (tasksByDate[cell.dateString] ?? []).length > 0;
+                const hasTasks =
+                  currentHouseholdId != null &&
+                  householdTasks.some(
+                    (t) =>
+                      t.householdId === currentHouseholdId &&
+                      occursOnDate(t, cell.dateString!)
+                  );
 
                 return (
                   <button
@@ -445,6 +500,7 @@ export function HouseholdHome() {
                   flexWrap: "wrap",
                   gap: "0.5rem",
                   alignItems: "center",
+                  marginBottom: "0.5rem",
                 }}
               >
                 <input
@@ -459,6 +515,43 @@ export function HouseholdHome() {
                   }}
                 />
                 <button type="submit">Add task</button>
+              </div>
+
+              {/* Recurrence controls */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.5rem",
+                  alignItems: "center",
+                  fontSize: "0.9rem",
+                }}
+              >
+                <label>
+                  Recurrence:&nbsp;
+                  <select
+                    value={recurrence}
+                    onChange={(e) =>
+                      setRecurrence(e.target.value as RecurrenceType)
+                    }
+                  >
+                    <option value="NONE">One-time</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="WEEKLY">Weekly</option>
+                    <option value="MONTHLY">Monthly</option>
+                  </select>
+                </label>
+
+                {recurrence !== "NONE" && (
+                  <label>
+                    End date:&nbsp;
+                    <input
+                      type="date"
+                      value={recurrenceEndDate}
+                      onChange={(e) => setRecurrenceEndDate(e.target.value)}
+                    />
+                  </label>
+                )}
               </div>
             </form>
 
