@@ -6,7 +6,6 @@ import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
 import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
 import { FamilyNewsPage } from "./pages/FamilyNewsPage";
 
-const client = generateClient<Schema>();
 
 function Page2() {
   return (
