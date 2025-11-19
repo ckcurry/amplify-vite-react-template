@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
-function HouseholdProjectsPage() {
+export function HouseholdProjectsPage() {
   const [households, setHouseholds] =
     useState<Array<Schema["Household"]["type"]>>([]);
 @@ -1100,9 +1102,36 @@ function HouseholdProjectsPage() {
