@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { client } from "../client";
+import { useEffect, useState, type FormEvent } from "react";
 import type { Schema } from "../../amplify/data/resource";
+import { uploadData, getUrl } from "aws-amplify/storage";
+import { client } from "../client";
 
 export function HouseholdProjectsPage() {
   const [households, setHouseholds] =
     useState<Array<Schema["Household"]["type"]>>([]);
-@@ -1100,9 +1102,36 @@ function HouseholdProjectsPage() {
+  const [membership, setMembership] =
+    useState<Schema["HouseholdMembership"]["type"] | null>(null);
+
   const [projects, setProjects] = useState<
     Array<Schema["HouseholdProject"]["type"]>
   >([]);
@@ -39,22 +41,30 @@ export function HouseholdProjectsPage() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
 
-  // subscribe to household data
+  // ===== subscribe to household data =====
   useEffect(() => {
     const householdSub = client.models.Household.observeQuery().subscribe({
-      next: (data) => setHouseholds([...data.items]),
-@@ -1118,13 +1147,62 @@ function HouseholdProjectsPage() {
-        next: (data) => setProjects([...data.items]),
+      next: (data: any) => setHouseholds([...data.items]),
+    });
+
+    const membershipSub =
+      client.models.HouseholdMembership.observeQuery().subscribe({
+        next: (data: any) => setMembership(data.items[0] ?? null),
+      });
+
+    const projectSub =
+      client.models.HouseholdProject.observeQuery().subscribe({
+        next: (data: any) => setProjects([...data.items]),
       });
 
     const milestoneSub =
       client.models.HouseholdMilestone.observeQuery().subscribe({
-        next: (data) => setMilestones([...data.items]),
+        next: (data: any) => setMilestones([...data.items]),
       });
 
     const updateSub =
       client.models.HouseholdMilestoneUpdate.observeQuery().subscribe({
-        next: (data) => setUpdates([...data.items]),
+        next: (data: any) => setUpdates([...data.items]),
       });
 
     return () => {
@@ -66,7 +76,7 @@ export function HouseholdProjectsPage() {
     };
   }, []);
 
-  // load signed video URLs for updates
+  // ===== load signed video URLs for updates =====
   useEffect(() => {
     if (updates.length === 0) return;
 
@@ -106,11 +116,14 @@ export function HouseholdProjectsPage() {
   const currentHouseholdId = membership?.householdId ?? null;
   const currentHousehold =
     currentHouseholdId != null
-@@ -1135,6 +1213,27 @@ function HouseholdProjectsPage() {
+      ? households.find((h) => h.id === currentHouseholdId) ?? null
+      : null;
+
+  const householdProjects = currentHouseholdId
     ? projects.filter((p) => p.householdId === currentHouseholdId)
     : [];
 
-  // helper: video duration calculation (same as Dashboard)
+  // ===== helper: video duration calculation =====
   async function getVideoDurationInSeconds(file: File): Promise<number> {
     return new Promise((resolve, reject) => {
       const video = document.createElement("video");
@@ -130,16 +143,21 @@ export function HouseholdProjectsPage() {
   }
 
   // ===== project actions =====
-
-  async function handleCreateProject(e?: React.FormEvent) {
+  async function handleCreateProject(e?: FormEvent) {
     if (e) e.preventDefault();
     if (!currentHouseholdId) return;
-@@ -1149,6 +1248,116 @@ function HouseholdProjectsPage() {
+    const name = newProjectName.trim();
+    if (!name) return;
+
+    await client.models.HouseholdProject.create({
+      householdId: currentHouseholdId,
+      name,
+    });
+
     setNewProjectName("");
   }
 
   // ===== milestone actions =====
-
   function openMilestoneDialog(projectId: string) {
     setSelectedProjectIdForMilestone(projectId);
     setNewMilestoneTitle("");
@@ -151,7 +169,7 @@ export function HouseholdProjectsPage() {
     setSelectedProjectIdForMilestone(null);
   }
 
-  async function handleCreateMilestone(e?: React.FormEvent) {
+  async function handleCreateMilestone(e?: FormEvent) {
     if (e) e.preventDefault();
     if (!selectedProjectIdForMilestone) return;
     const title = newMilestoneTitle.trim();
@@ -172,7 +190,6 @@ export function HouseholdProjectsPage() {
   }
 
   // ===== update actions =====
-
   function openUpdateDialog(milestoneId: string) {
     setSelectedMilestoneIdForUpdate(milestoneId);
     setNewUpdateNote("");
@@ -188,7 +205,7 @@ export function HouseholdProjectsPage() {
     setUpdateError(null);
   }
 
-  async function handleCreateUpdate(e?: React.FormEvent) {
+  async function handleCreateUpdate(e?: FormEvent) {
     if (e) e.preventDefault();
     if (!selectedMilestoneIdForUpdate) return;
 
@@ -248,10 +265,18 @@ export function HouseholdProjectsPage() {
     await client.models.HouseholdMilestoneUpdate.delete({ id });
   }
 
+  // ===== render =====
   if (!membership || !currentHousehold) {
     return (
       <main>
-@@ -1163,6 +1372,7 @@ function HouseholdProjectsPage() {
+        <h1>Household projects</h1>
+        <p>You need to be part of a household to see household projects.</p>
+      </main>
+    );
+  }
+
+  return (
+    <main>
       <h1>Household projects</h1>
       <p>Household: {currentHousehold.name}</p>
 
@@ -259,7 +284,13 @@ export function HouseholdProjectsPage() {
       <section style={{ marginTop: "1rem", marginBottom: "1.5rem" }}>
         <form onSubmit={handleCreateProject}>
           <input
-@@ -1176,21 +1386,303 @@ function HouseholdProjectsPage() {
+            type="text"
+            placeholder="New household project"
+            value={newProjectName}
+            onChange={(e) => setNewProjectName(e.target.value)}
+            style={{ width: "100%", maxWidth: "400px", marginRight: "0.5rem" }}
+          />
+          <button type="submit">Add project</button>
         </form>
       </section>
 
@@ -269,10 +300,6 @@ export function HouseholdProjectsPage() {
           No household projects yet.
         </p>
       ) : (
-        <ul>
-          {householdProjects.map((p) => (
-            <li key={p.id}>• {p.name}</li>
-          ))}
         <ul style={{ listStyle: "none", padding: 0 }}>
           {householdProjects.map((project) => {
             const projectMilestones = milestones.filter(
