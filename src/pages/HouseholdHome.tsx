@@ -32,19 +32,19 @@ export function HouseholdHome() {
   // subscribe to household + membership + tasks
   useEffect(() => {
     const householdSub = client.models.Household.observeQuery().subscribe({
-      next: (data) => setHouseholds([...data.items]),
+      next: (data: any) => setHouseholds([...data.items]),
     });
 
     const membershipSub =
       client.models.HouseholdMembership.observeQuery().subscribe({
-        next: (data) => {
+        next: (data: any) => {
           const first = data.items[0] ?? null;
           setMembership(first);
         },
       });
 
     const taskSub = client.models.HouseholdTask.observeQuery().subscribe({
-      next: (data) => setHouseholdTasks([...data.items]),
+      next: (data: any) => setHouseholdTasks([...data.items]),
     });
 
     return () => {
@@ -90,7 +90,7 @@ export function HouseholdHome() {
     }
 
     if (rec === "DAILY") {
-      // if we got here, target >= base and <= end (if any)
+      // If we got here, target >= base and <= end (if any)
       return true;
     }
 
