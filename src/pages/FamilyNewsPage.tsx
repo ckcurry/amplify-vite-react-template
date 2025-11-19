@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
-function FamilyNewsPage() {
+export function FamilyNewsPage() {
   const [membership, setMembership] =
     useState<Schema["HouseholdMembership"]["type"] | null>(null);
   const [projects, setProjects] = useState<
