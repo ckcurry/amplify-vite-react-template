@@ -64,7 +64,7 @@ const schema = a.schema({
       recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
 
       // 2) optional end date: use nullable() instead of .optional()
-      recurrenceEndDate: a.date().nullable(),
+      recurrenceEndDate: a.date(),
     })
     .authorization((allow) => [allow.owner()]),
 
