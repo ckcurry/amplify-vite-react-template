@@ -52,17 +52,21 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()]),
 
-   HouseholdTask: a
+  HouseholdTask: a
     .model({
       householdId: a.id().required(),
-      household: a.belongsTo("Household", "householdId"),
       content: a.string().required(),
-      completed: a.boolean().default(false),
+      completed: a.boolean().required(),
+      scheduledFor: a.date().required(),
   
-      // ⭐ NEW: date this task is scheduled for (used by the calendar)
-      scheduledFor: a.date(),   // optional
+      // NEW FIELDS:
+      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]).default("NONE"),
+      recurrenceEndDate: a.date().optional(),
+  
+      household: a.belongsTo("Household", "householdId"),
     })
-    .authorization((allow) => [allow.authenticated()]),
+    .authorization((allow) => [allow.owner()]),
+
 
   HouseholdMembership: a
     .model({
