@@ -144,16 +144,6 @@ export function Dashboard() {
         minHeight: "100vh",
       }}
     >
-      <h1
-        style={{
-          fontSize: "1.75rem",
-          marginBottom: "1rem",
-          textAlign: "center",
-          wordBreak: "break-word",
-        }}
-      >
-        Project by Smallworld
-      </h1>
 
       {/* Top buttons */}
       <div
