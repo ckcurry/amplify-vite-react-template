@@ -404,6 +404,63 @@ export function Dashboard() {
         </div>
       </section>
 
+      {/* Active project */}
+      <section style={{ marginBottom: "2rem" }}>
+        <h2>Active Project</h2>
+
+        {projects.length === 0 ? (
+          <p style={{ color: "#888", fontStyle: "italic" }}>
+            No projects yet. Create a project to choose an active one.
+          </p>
+        ) : (
+          <>
+            <select
+              value={activeProjectId ?? ""}
+              onChange={(e) =>
+                setActiveProjectId(e.target.value || null)
+              }
+              style={{ width: "100%", maxWidth: "400px", marginBottom: "0.75rem" }}
+            >
+              <option value="">-- Select active project --</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+
+            {activeProject ? (
+              <div
+                style={{
+                  border: "1px solid #ddd",
+                  borderRadius: "0.5rem",
+                  padding: "1rem",
+                  marginTop: "0.5rem",
+                }}
+              >
+                <h3 style={{ marginTop: 0 }}>{activeProject.name}</h3>
+
+                {activeProjectMilestones.length === 0 ? (
+                  <p style={{ color: "#888", fontStyle: "italic" }}>
+                    No milestones yet for this project.
+                  </p>
+                ) : (
+                  <ul style={{ marginLeft: "1rem" }}>
+                    {activeProjectMilestones.map((m) => (
+                      <li key={m.id}>• {m.title}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : (
+              <p style={{ color: "#888", fontStyle: "italic" }}>
+                No active project selected.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
       {/* Projects + milestones + updates */}
       <section style={{ marginBottom: "2rem" }}>
         <h2>Projects</h2>
