@@ -60,8 +60,11 @@ const schema = a.schema({
       scheduledFor: a.date().required(),
   
       // NEW FIELDS:
-      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]).default("NONE"),
-      recurrenceEndDate: a.date().optional(),
+      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"], {
+        default: "NONE",
+      }),
+
+      recurrenceEndDate: a.date(),
   
       household: a.belongsTo("Household", "householdId"),
     })
