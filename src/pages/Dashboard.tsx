@@ -54,6 +54,9 @@ export function Dashboard() {
 
   const { signOut } = useAuthenticator();
 
+    // Active project for the dashboard
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
   // subscribe to data
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
@@ -79,6 +82,24 @@ export function Dashboard() {
       updateSub.unsubscribe();
     };
   }, []);
+
+    // Load active project from localStorage on first render
+  useEffect(() => {
+    const stored = window.localStorage.getItem("activeProjectId");
+    if (stored) {
+      setActiveProjectId(stored);
+    }
+  }, []);
+
+  // Persist active project selection
+  useEffect(() => {
+    if (activeProjectId) {
+      window.localStorage.setItem("activeProjectId", activeProjectId);
+    } else {
+      window.localStorage.removeItem("activeProjectId");
+    }
+  }, [activeProjectId]);
+
 
   // load signed URLs for each update video
   useEffect(() => {
@@ -296,6 +317,22 @@ export function Dashboard() {
   async function deleteUpdate(id: string) {
     await client.models.MilestoneUpdate.delete({ id });
   }
+
+  const activeProject =
+    activeProjectId != null
+      ? projects.find((p) => p.id === activeProjectId) ?? null
+      : null;
+
+  const activeProjectMilestones = activeProject
+    ? milestones.filter((m) => m.projectId === activeProject.id)
+    : [];
+
+  const activeProjectUpdates = activeProject
+    ? updates.filter((u) =>
+        activeProjectMilestones.some((m) => m.id === u.milestoneId)
+      )
+    : [];
+
 
   return (
     <main>
