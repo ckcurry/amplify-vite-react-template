@@ -4,6 +4,11 @@ import { useAuthenticator } from "@aws-amplify/ui-react";
 import type { Schema } from "../amplify/data/resource";
 import { uploadData, getUrl } from "aws-amplify/storage";
 import { generateClient } from "aws-amplify/data";
+import { Dashboard } from "./pages/Dashboard";
+import { HouseholdHome } from "./pages/HouseholdHome";
+import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
+import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
+import { FamilyNewsPage } from "./pages/FamilyNewsPage"
 
 const client = generateClient<Schema>();
 
