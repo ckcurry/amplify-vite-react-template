@@ -299,7 +299,7 @@ export function Dashboard() {
 
   return (
     <main>
-      <h1>My todos</h1>
+      <h1>Project by Smallworld</h1>
 
       {/* Top buttons */}
       <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
