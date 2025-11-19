@@ -1,6 +1,7 @@
 // src/pages/Dashboard.tsx
 import { useEffect, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
+import { uploadData } from "aws-amplify/storage";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
@@ -30,6 +31,15 @@ export function Dashboard() {
 
   // Active project for the dashboard
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
+  // ===== Update dialog for active project =====
+  const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
+  const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
+    useState<string | null>(null);
+  const [newUpdateNote, setNewUpdateNote] = useState("");
+  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
 
   const { signOut } = useAuthenticator();
 
@@ -70,6 +80,25 @@ export function Dashboard() {
       window.localStorage.removeItem("activeProjectId");
     }
   }, [activeProjectId]);
+
+  // ===== helper: video duration =====
+  async function getVideoDurationInSeconds(file: File): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+
+      video.onloadedmetadata = () => {
+        window.URL.revokeObjectURL(video.src);
+        resolve(video.duration);
+      };
+
+      video.onerror = () => {
+        reject(new Error("Failed to load video metadata"));
+      };
+
+      video.src = URL.createObjectURL(file);
+    });
+  }
 
   // ===== TODOS =====
   function openTodoDialog() {
@@ -134,16 +163,100 @@ export function Dashboard() {
     ? milestones.filter((m) => m.projectId === activeProject.id)
     : [];
 
+  // ===== UPDATE (for active project) =====
+  function openUpdateDialog() {
+    if (!activeProject || activeProjectMilestones.length === 0) return;
+    const firstMilestone = activeProjectMilestones[0];
+    setSelectedMilestoneIdForUpdate(firstMilestone.id);
+    setNewUpdateNote("");
+    setSelectedVideoFile(null);
+    setUpdateError(null);
+    setIsUpdateDialogOpen(true);
+  }
+
+  function closeUpdateDialog() {
+    setIsUpdateDialogOpen(false);
+    setSelectedMilestoneIdForUpdate(null);
+    setSelectedVideoFile(null);
+    setUpdateError(null);
+  }
+
+  async function handleCreateUpdate(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!selectedMilestoneIdForUpdate) {
+      setUpdateError("Please select a milestone.");
+      return;
+    }
+    if (!selectedVideoFile) {
+      setUpdateError("Please select a video file.");
+      return;
+    }
+
+    try {
+      setIsUploadingUpdate(true);
+      setUpdateError(null);
+
+      const durationSeconds = await getVideoDurationInSeconds(selectedVideoFile);
+      if (durationSeconds > 60) {
+        setIsUploadingUpdate(false);
+        setUpdateError("Video must be 60 seconds or less.");
+        return;
+      }
+
+      const path = `milestone-updates/${selectedMilestoneIdForUpdate}/${Date.now()}-${selectedVideoFile.name}`;
+
+      const result = await uploadData({
+        path,
+        data: selectedVideoFile,
+        options: {
+          contentType: selectedVideoFile.type,
+        },
+      }).result;
+
+      const note = newUpdateNote.trim();
+
+      await client.models.MilestoneUpdate.create({
+        milestoneId: selectedMilestoneIdForUpdate,
+        note,
+        videoUrl: result?.path ?? path,
+        durationSeconds: Math.round(durationSeconds),
+      });
+
+      setNewUpdateNote("");
+      setSelectedVideoFile(null);
+      setIsUpdateDialogOpen(false);
+      setSelectedMilestoneIdForUpdate(null);
+    } catch (err) {
+      console.error("Upload failed:", err);
+      setUpdateError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong uploading the video."
+      );
+    } finally {
+      setIsUploadingUpdate(false);
+    }
+  }
+
   return (
     <main
       style={{
-        maxWidth: "960px",
-        margin: "0 auto",
+        width: "100%",
         padding: "1rem",
         boxSizing: "border-box",
         minHeight: "100vh",
       }}
     >
+      <h1
+        style={{
+          fontSize: "1.75rem",
+          marginBottom: "1.5rem", // more space so buttons aren't covered
+          textAlign: "center",
+          wordBreak: "break-word",
+        }}
+      >
+        Project by Smallworld
+      </h1>
 
       {/* Top buttons */}
       <div
@@ -151,7 +264,8 @@ export function Dashboard() {
           display: "flex",
           flexWrap: "wrap",
           gap: "0.5rem",
-          marginBottom: "1rem",
+          marginBottom: "1.25rem",
+          justifyContent: "center",
         }}
       >
         <button onClick={openTodoDialog}>+ new task</button>
@@ -224,7 +338,7 @@ export function Dashboard() {
         </div>
       </section>
 
-      {/* Active project summary only */}
+      {/* Active project */}
       <section style={{ marginBottom: "2rem" }}>
         <h2>Active Project</h2>
 
@@ -261,9 +375,27 @@ export function Dashboard() {
                   boxSizing: "border-box",
                 }}
               >
-                <h3 style={{ marginTop: 0, wordBreak: "break-word" }}>
-                  {activeProject.name}
-                </h3>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "0.5rem",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <h3 style={{ margin: 0, wordBreak: "break-word" }}>
+                    {activeProject.name}
+                  </h3>
+
+                  <button
+                    onClick={openUpdateDialog}
+                    disabled={activeProjectMilestones.length === 0}
+                  >
+                    + add update
+                  </button>
+                </div>
 
                 {activeProjectMilestones.length === 0 ? (
                   <p style={{ color: "#888", fontStyle: "italic" }}>
@@ -398,6 +530,125 @@ export function Dashboard() {
                   Cancel
                 </button>
                 <button type="submit">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Update dialog (for active project) ===== */}
+      {isUpdateDialogOpen && activeProject && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
+          }}
+          onClick={closeUpdateDialog}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              width: "100%",
+              maxWidth: "440px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>New update</h2>
+
+            {/* Milestone picker for this active project */}
+            <label style={{ display: "block", marginBottom: "0.5rem" }}>
+              Milestone
+            </label>
+            <select
+              value={selectedMilestoneIdForUpdate ?? ""}
+              onChange={(e) =>
+                setSelectedMilestoneIdForUpdate(
+                  e.target.value || null
+                )
+              }
+              style={{
+                width: "100%",
+                marginBottom: "1rem",
+              }}
+            >
+              {activeProjectMilestones.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.title}
+                </option>
+              ))}
+            </select>
+
+            <form onSubmit={handleCreateUpdate}>
+              <label style={{ display: "block", marginBottom: "0.5rem" }}>
+                Video (max 60 seconds)
+              </label>
+              <input
+                type="file"
+                accept="video/*"
+                capture="user"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null;
+                  setSelectedVideoFile(file);
+                  setUpdateError(null);
+                }}
+                style={{ marginBottom: "1rem", width: "100%" }}
+              />
+
+              <textarea
+                placeholder="Optional note about this update"
+                value={newUpdateNote}
+                onChange={(e) => setNewUpdateNote(e.target.value)}
+                style={{
+                  width: "100%",
+                  minHeight: "80px",
+                  marginBottom: "0.75rem",
+                  resize: "vertical",
+                }}
+              />
+
+              {updateError && (
+                <div
+                  style={{
+                    color: "red",
+                    marginBottom: "0.75rem",
+                    fontSize: "0.9rem",
+                  }}
+                >
+                  {updateError}
+                </div>
+              )}
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "0.5rem",
+                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={closeUpdateDialog}
+                  disabled={isUploadingUpdate}
+                >
+                  Cancel
+                </button>
+                <button type="submit" disabled={isUploadingUpdate}>
+                  {isUploadingUpdate ? "Uploading..." : "Create"}
+                </button>
               </div>
             </form>
           </div>
