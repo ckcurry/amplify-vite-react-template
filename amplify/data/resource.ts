@@ -54,19 +54,29 @@ const schema = a.schema({
 
   HouseholdTask: a
     .model({
+      // you can keep this explicit id or omit it (Amplify will add `id` automatically)
       id: a.id().required(),
-      householdId: a.string().required(),
+  
+      // 🔑 Foreign key that matches Household.tasks hasMany("HouseholdTask", "householdId")
+      householdId: a.id().required(),
+  
+      // 🔗 Relationship back to Household
+      household: a.belongsTo("Household", "householdId"),
+  
       content: a.string().required(),
       completed: a.boolean().required(),
-      scheduledFor: a.date().required(),
-
-      // 1) enum with NO default here – just the enum values:
+  
+      // You're treating scheduledFor as "YYYY-MM-DD" in the frontend helper,
+      // so make this a string instead of a date for maximum compatibility:
+      scheduledFor: a.string().required(),
+  
+      // recurrence enum (no default in schema, you handle it in React)
       recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
-
-      // 2) optional end date: use nullable() instead of .optional()
-      recurrenceEndDate: a.date(),
+  
+      // make this optional; stored as a string date "YYYY-MM-DD" or null
+      recurrenceEndDate: a.string(),
     })
-    .authorization((allow) => [allow.owner()]),
+  .authorization((allow) => [allow.owner()]),
 
 
   HouseholdMembership: a
