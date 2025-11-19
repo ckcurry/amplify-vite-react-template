@@ -1,416 +1,166 @@
-// src/pages/Dashboard.tsx
-import { useEffect, useState } from "react";
-import { useAuthenticator } from "@aws-amplify/ui-react";
-import { client } from "../client";
-import type { Schema } from "../../amplify/data/resource";
+// src/App.tsx
+import { useState } from "react";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 
-export function Dashboard() {
-  const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
-  const [milestones, setMilestones] = useState<
-    Array<Schema["Milestone"]["type"]>
-  >([]);
+// Page components
+import { Dashboard } from "./pages/Dashboard";
+import { HouseholdHome } from "./pages/HouseholdHome";
+import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
+import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
+import { FamilyNewsPage } from "./pages/FamilyNewsPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
 
-  // Todo dialog
-  const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
-  const [newTodoContent, setNewTodoContent] = useState("");
-
-  // Project dialog
-  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
-
-  // 3 active task slots (Todo IDs)
-  const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
-    null,
-    null,
-    null,
-  ]);
-
-  // Active project for the dashboard
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
-
-  const { signOut } = useAuthenticator();
-
-  // subscribe to data
-  useEffect(() => {
-    const todoSub = client.models.Todo.observeQuery().subscribe({
-      next: (data: any) => setTodos([...data.items]),
-    });
-
-    const projectSub = client.models.Project.observeQuery().subscribe({
-      next: (data: any) => setProjects([...data.items]),
-    });
-
-    const milestoneSub = client.models.Milestone.observeQuery().subscribe({
-      next: (data: any) => setMilestones([...data.items]),
-    });
-
-    return () => {
-      todoSub.unsubscribe();
-      projectSub.unsubscribe();
-      milestoneSub.unsubscribe();
-    };
-  }, []);
-
-  // Load active project from localStorage on first render
-  useEffect(() => {
-    const stored = window.localStorage.getItem("activeProjectId");
-    if (stored) {
-      setActiveProjectId(stored);
-    }
-  }, []);
-
-  // Persist active project selection
-  useEffect(() => {
-    if (activeProjectId) {
-      window.localStorage.setItem("activeProjectId", activeProjectId);
-    } else {
-      window.localStorage.removeItem("activeProjectId");
-    }
-  }, [activeProjectId]);
-
-  // ===== TODOS =====
-  function openTodoDialog() {
-    setNewTodoContent("");
-    setIsTodoDialogOpen(true);
-  }
-
-  function closeTodoDialog() {
-    setIsTodoDialogOpen(false);
-  }
-
-  async function handleCreateTodo(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const content = newTodoContent.trim();
-    if (!content) return;
-
-    await client.models.Todo.create({ content });
-    setNewTodoContent("");
-    setIsTodoDialogOpen(false);
-  }
-
-  function handleSlotChange(slotIndex: number, todoId: string) {
-    setActiveSlots((prev) => {
-      const copy = [...prev];
-      copy[slotIndex] = todoId || null;
-      return copy;
-    });
-  }
-
-  async function deleteTodo(id: string) {
-    setActiveSlots((prev) => prev.map((slotId) => (slotId === id ? null : slotId)));
-    await client.models.Todo.delete({ id });
-  }
-
-  // ===== PROJECTS (for active project picker only) =====
-  function openProjectDialog() {
-    setNewProjectName("");
-    setIsProjectDialogOpen(true);
-  }
-
-  function closeProjectDialog() {
-    setIsProjectDialogOpen(false);
-  }
-
-  async function handleCreateProject(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const name = newProjectName.trim();
-    if (!name) return;
-
-    await client.models.Project.create({ name });
-    setNewProjectName("");
-    setIsProjectDialogOpen(false);
-  }
-
-  // Active project derived data
-  const activeProject =
-    activeProjectId != null
-      ? projects.find((p) => p.id === activeProjectId) ?? null
-      : null;
-
-  const activeProjectMilestones = activeProject
-    ? milestones.filter((m) => m.projectId === activeProject.id)
-    : [];
+function AppShell() {
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <main
+    <div
       style={{
-        maxWidth: "960px",
-        margin: "0 auto",
-        padding: "1rem",
-        boxSizing: "border-box",
         minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        background: "#f5f5f7",
       }}
     >
-      <h1
-        style={{
-          fontSize: "1.75rem",
-          marginBottom: "1rem",
-          textAlign: "center",
-          wordBreak: "break-word",
-        }}
-      >
-        Project by Smallworld
-      </h1>
-
-      {/* Top buttons */}
-      <div
+      {/* Header with app name + menu */}
+      <header
         style={{
           display: "flex",
-          flexWrap: "wrap",
-          gap: "0.5rem",
-          marginBottom: "1rem",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0.75rem 1rem",
+          borderBottom: "1px solid #ddd",
+          background: "#ffffff",
+          position: "sticky",
+          top: 0,
+          zIndex: 100,
         }}
       >
-        <button onClick={openTodoDialog}>+ new task</button>
-        <button onClick={openProjectDialog}>+ new project</button>
-      </div>
-
-      {/* Active slots */}
-      <section style={{ marginBottom: "2rem" }}>
-        <h2>Active Tasks</h2>
-        <div
+        <span
           style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: "1rem",
+            fontWeight: "bold",
+            fontSize: "1.1rem",
+            whiteSpace: "nowrap",
           }}
         >
-          {activeSlots.map((slotTodoId, index) => {
-            const todo = todos.find((t) => t.id === slotTodoId);
-            return (
-              <div
-                key={index}
-                style={{
-                  border: "1px solid #ccc",
-                  borderRadius: "0.5rem",
-                  padding: "1rem",
-                  minHeight: "120px",
-                  boxSizing: "border-box",
-                }}
-              >
-                <h3>Slot {index + 1}</h3>
-                <select
-                  value={slotTodoId ?? ""}
-                  onChange={(e) => handleSlotChange(index, e.target.value)}
-                  style={{
-                    width: "100%",
-                    marginBottom: "0.75rem",
-                    maxWidth: "100%",
-                  }}
-                >
-                  <option value="">-- Select a task --</option>
-                  {todos.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.content}
-                    </option>
-                  ))}
-                </select>
+          Project by Smallworld
+        </span>
 
-                {todo ? (
-                  <div
-                    style={{
-                      background: "#f3f3f3",
-                      padding: "0.5rem",
-                      borderRadius: "0.25rem",
-                      cursor: "pointer",
-                      wordBreak: "break-word",
-                    }}
-                    onClick={() => deleteTodo(todo.id)}
-                    title="Click to delete this task"
-                  >
-                    {todo.content}
-                  </div>
-                ) : (
-                  <div style={{ color: "#888", fontStyle: "italic" }}>
-                    No task selected
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setMenuOpen((open) => !open)}
+            style={{ padding: "0.5rem 0.75rem" }}
+          >
+            Menu ▾
+          </button>
 
-      {/* Active project (only summary here) */}
-      <section style={{ marginBottom: "2rem" }}>
-        <h2>Active Project</h2>
-
-        {projects.length === 0 ? (
-          <p style={{ color: "#888", fontStyle: "italic" }}>
-            No projects yet. Create a project to choose an active one.
-          </p>
-        ) : (
-          <>
-            <select
-              value={activeProjectId ?? ""}
-              onChange={(e) => setActiveProjectId(e.target.value || null)}
+          {menuOpen && (
+            <nav
               style={{
-                width: "100%",
-                maxWidth: "400px",
-                marginBottom: "0.75rem",
+                position: "absolute",
+                right: 0,
+                marginTop: "0.25rem",
+                background: "white",
+                border: "1px solid #ddd",
+                borderRadius: "0.5rem",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                minWidth: "200px",
+                zIndex: 200,
               }}
             >
-              <option value="">-- Select active project --</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-
-            {activeProject ? (
-              <div
+              <ul
                 style={{
-                  border: "1px solid #ddd",
-                  borderRadius: "0.5rem",
-                  padding: "1rem",
-                  marginTop: "0.5rem",
-                  boxSizing: "border-box",
+                  listStyle: "none",
+                  padding: "0.5rem",
+                  margin: 0,
                 }}
               >
-                <h3 style={{ marginTop: 0, wordBreak: "break-word" }}>
-                  {activeProject.name}
-                </h3>
-
-                {activeProjectMilestones.length === 0 ? (
-                  <p style={{ color: "#888", fontStyle: "italic" }}>
-                    No milestones yet for this project.
-                  </p>
-                ) : (
-                  <ul style={{ marginLeft: "1rem" }}>
-                    {activeProjectMilestones.map((m) => (
-                      <li key={m.id}>• {m.title}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ) : (
-              <p style={{ color: "#888", fontStyle: "italic" }}>
-                No active project selected.
-              </p>
-            )}
-          </>
-        )}
-      </section>
-
-      <button onClick={signOut} style={{ marginTop: "1rem" }}>
-        Sign out
-      </button>
-
-      {/* ===== Todo dialog ===== */}
-      {isTodoDialogOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-            padding: "1rem",
-            boxSizing: "border-box",
-          }}
-          onClick={closeTodoDialog}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              width: "100%",
-              maxWidth: "420px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-              boxSizing: "border-box",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>New task</h2>
-            <form onSubmit={handleCreateTodo}>
-              <input
-                type="text"
-                placeholder="Task content"
-                value={newTodoContent}
-                onChange={(e) => setNewTodoContent(e.target.value)}
-                style={{ width: "100%", marginBottom: "1rem" }}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  gap: "0.5rem",
-                  justifyContent: "flex-end",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button type="button" onClick={closeTodoDialog}>
-                  Cancel
-                </button>
-                <button type="submit">Create</button>
-              </div>
-            </form>
-          </div>
+                <li>
+                  <Link
+                    to="/"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    Dashboard
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/projects"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    My Projects
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/household"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    Household
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/household-projects"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    Household Projects
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/household-grocery"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    Grocery & Dinner
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    to="/family-news"
+                    onClick={() => setMenuOpen(false)}
+                    style={{ display: "block", padding: "0.25rem 0" }}
+                  >
+                    Family News
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+          )}
         </div>
-      )}
+      </header>
 
-      {/* ===== Project dialog ===== */}
-      {isProjectDialogOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-            padding: "1rem",
-            boxSizing: "border-box",
-          }}
-          onClick={closeProjectDialog}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              width: "100%",
-              maxWidth: "420px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-              boxSizing: "border-box",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>New project</h2>
-            <form onSubmit={handleCreateProject}>
-              <input
-                type="text"
-                placeholder="Project name"
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                style={{ width: "100%", marginBottom: "1rem" }}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  gap: "0.5rem",
-                  justifyContent: "flex-end",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button type="button" onClick={closeProjectDialog}>
-                  Cancel
-                </button>
-                <button type="submit">Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </main>
+      {/* Main routed content */}
+      <div style={{ flex: 1 }}>
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/household" element={<HouseholdHome />} />
+          <Route
+            path="/household-projects"
+            element={<HouseholdProjectsPage />}
+          />
+          <Route
+            path="/household-grocery"
+            element={<HouseholdGroceryPage />}
+          />
+          <Route path="/family-news" element={<FamilyNewsPage />} />
+        </Routes>
+      </div>
+    </div>
+  );
+}
+
+// 👇 default export so main.tsx can `import App from "./App"`
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppShell />
+    </BrowserRouter>
   );
 }
