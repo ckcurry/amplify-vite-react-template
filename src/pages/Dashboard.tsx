@@ -235,9 +235,10 @@ export function Dashboard() {
     return claimedByUserId === currentUserId;
   });
 
-  // Personal todos that are not completed and not already in another slot
+  // Personal todos that are not already in another slot
+  // (no "completed" field in Todo model anymore)
   const availableTodos = todos.filter(
-    (t) => !t.completed && !activeTodoIds.has(t.id)
+    (t) => !activeTodoIds.has(t.id)
   );
 
   // ===== TODOS =====
@@ -274,14 +275,13 @@ export function Dashboard() {
 
     try {
       if (ref.kind === "todo") {
+        // Personal todo: treat "Finished" as delete
         const todo = todos.find((t) => t.id === ref.id);
         if (todo) {
-          await client.models.Todo.update({
-            id: todo.id,
-            completed: true,
-          });
+          await client.models.Todo.delete({ id: todo.id });
         }
       } else {
+        // Household task: mark completed = true (on shared model)
         const task = householdTasks.find((t) => t.id === ref.id);
         if (task) {
           await client.models.HouseholdTask.update({
@@ -298,16 +298,6 @@ export function Dashboard() {
   function handleSlotDoLater(slotIndex: number) {
     // Just free the slot; underlying task stays the same (still claimed if household)
     clearSlot(slotIndex);
-  }
-
-  async function deleteTodo(id: string) {
-    // If any slot was referencing this todo, clear it
-    setActiveSlots((prev) =>
-      prev.map((ref) =>
-        ref && ref.kind === "todo" && ref.id === id ? null : ref
-      )
-    );
-    await client.models.Todo.delete({ id });
   }
 
   // ===== PROJECTS (create + active project only) =====
