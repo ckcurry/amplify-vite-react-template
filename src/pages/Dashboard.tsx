@@ -7,11 +7,67 @@ import type { Schema } from "../../amplify/data/resource";
 
 /* ===================== DASHBOARD ===================== */
 
+type RecurrenceType = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+
+function occursOnDate(
+  task: Schema["HouseholdTask"]["type"],
+  dateStr: string
+): boolean {
+  if (!task.scheduledFor) return false;
+
+  const base = new Date(task.scheduledFor + "T00:00:00");
+  const target = new Date(dateStr + "T00:00:00");
+
+  if (Number.isNaN(base.getTime()) || Number.isNaN(target.getTime())) {
+    return false;
+  }
+
+  // only on/after start
+  if (target < base) return false;
+
+  const rec = (task.recurrence ?? "NONE") as RecurrenceType;
+  const end = task.recurrenceEndDate
+    ? new Date(task.recurrenceEndDate + "T00:00:00")
+    : null;
+  if (end && target > end) return false;
+
+  if (rec === "NONE") {
+    return task.scheduledFor === dateStr;
+  }
+
+  if (rec === "DAILY") {
+    return true;
+  }
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const diffDays = Math.round(
+    (target.getTime() - base.getTime()) / msPerDay
+  );
+  if (diffDays < 0) return false;
+
+  if (rec === "WEEKLY") {
+    return diffDays % 7 === 0;
+  }
+
+  if (rec === "MONTHLY") {
+    return base.getDate() === target.getDate();
+  }
+
+  return false;
+}
+
 export function Dashboard() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
   const [milestones, setMilestones] = useState<
     Array<Schema["Milestone"]["type"]>
+  >([]);
+
+  // Household membership + tasks
+  const [householdMembership, setHouseholdMembership] =
+    useState<Schema["HouseholdMembership"]["type"] | null>(null);
+  const [householdTasks, setHouseholdTasks] = useState<
+    Array<Schema["HouseholdTask"]["type"]>
   >([]);
 
   // Todo dialog
@@ -41,9 +97,13 @@ export function Dashboard() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
 
+  // NEW: Task picker dialog
+  const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const [pickerSlotIndex, setPickerSlotIndex] = useState<number | null>(null);
+
   const { signOut } = useAuthenticator();
 
-  // subscribe to data (todos, projects, milestones only)
+  // subscribe to data (todos, projects, milestones, household membership/tasks)
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
       next: (data: any) => setTodos([...data.items]),
@@ -57,10 +117,24 @@ export function Dashboard() {
       next: (data: any) => setMilestones([...data.items]),
     });
 
+    const membershipSub =
+      client.models.HouseholdMembership.observeQuery().subscribe({
+        next: (data: any) => {
+          setHouseholdMembership(data.items[0] ?? null);
+        },
+      });
+
+    const householdTaskSub =
+      client.models.HouseholdTask.observeQuery().subscribe({
+        next: (data: any) => setHouseholdTasks([...data.items]),
+      });
+
     return () => {
       todoSub.unsubscribe();
       projectSub.unsubscribe();
       milestoneSub.unsubscribe();
+      membershipSub.unsubscribe();
+      householdTaskSub.unsubscribe();
     };
   }, []);
 
@@ -120,10 +194,10 @@ export function Dashboard() {
     setIsTodoDialogOpen(false);
   }
 
-  function handleSlotChange(slotIndex: number, todoId: string) {
+  function handleSlotChange(slotIndex: number, todoId: string | null) {
     setActiveSlots((prev) => {
       const copy = [...prev];
-      copy[slotIndex] = todoId || null;
+      copy[slotIndex] = todoId;
       return copy;
     });
   }
@@ -238,6 +312,66 @@ export function Dashboard() {
     }
   }
 
+  // ===== HOUSEHOLD TASKS + TASK PICKER =====
+  const currentHouseholdId = householdMembership?.householdId ?? null;
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const householdTasksToday =
+    currentHouseholdId == null
+      ? []
+      : householdTasks.filter(
+          (t) =>
+            t.householdId === currentHouseholdId &&
+            !t.completed &&
+            occursOnDate(t, todayIso)
+        );
+
+  const personalTodosAvailable = todos.filter(
+    (t) => !activeSlots.includes(t.id)
+  );
+
+  function openTaskPicker(slotIndex: number) {
+    setPickerSlotIndex(slotIndex);
+    setIsTaskPickerOpen(true);
+  }
+
+  function closeTaskPicker() {
+    setPickerSlotIndex(null);
+    setIsTaskPickerOpen(false);
+  }
+
+  async function claimHouseholdTaskIntoSlot(
+    task: Schema["HouseholdTask"]["type"]
+  ) {
+    // 1) create a personal todo
+    const { data: created } = await client.models.Todo.create({
+      content: task.content,
+    });
+
+    // 2) mark the household task as completed
+    await client.models.HouseholdTask.update({
+      id: task.id,
+      completed: true,
+    });
+
+    // 3) assign into the chosen slot
+    if (created && pickerSlotIndex !== null) {
+      setActiveSlots((prev) => {
+        const copy = [...prev];
+        copy[pickerSlotIndex] = created.id;
+        return copy;
+      });
+    }
+
+    closeTaskPicker();
+  }
+
+  function assignExistingTodoToSlot(todoId: string) {
+    if (pickerSlotIndex === null) return;
+    handleSlotChange(pickerSlotIndex, todoId);
+    closeTaskPicker();
+  }
+
   return (
     <main
       style={{
@@ -250,7 +384,7 @@ export function Dashboard() {
       <h1
         style={{
           fontSize: "1.75rem",
-          marginBottom: "1.5rem", // more space so buttons aren't covered
+          marginBottom: "1.5rem", // space so buttons aren't covered
           textAlign: "center",
           wordBreak: "break-word",
         }}
@@ -283,7 +417,10 @@ export function Dashboard() {
           }}
         >
           {activeSlots.map((slotTodoId, index) => {
-            const todo = todos.find((t) => t.id === slotTodoId);
+            const todo = slotTodoId
+              ? todos.find((t) => t.id === slotTodoId)
+              : null;
+
             return (
               <div
                 key={index}
@@ -293,44 +430,61 @@ export function Dashboard() {
                   padding: "1rem",
                   minHeight: "120px",
                   boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
                 }}
               >
                 <h3>Slot {index + 1}</h3>
-                <select
-                  value={slotTodoId ?? ""}
-                  onChange={(e) => handleSlotChange(index, e.target.value)}
-                  style={{
-                    width: "100%",
-                    marginBottom: "0.75rem",
-                    maxWidth: "100%",
-                  }}
-                >
-                  <option value="">-- Select a task --</option>
-                  {todos.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.content}
-                    </option>
-                  ))}
-                </select>
 
                 {todo ? (
-                  <div
-                    style={{
-                      background: "#f3f3f3",
-                      padding: "0.5rem",
-                      borderRadius: "0.25rem",
-                      cursor: "pointer",
-                      wordBreak: "break-word",
-                    }}
-                    onClick={() => deleteTodo(todo.id)}
-                    title="Click to delete this task"
-                  >
-                    {todo.content}
-                  </div>
+                  <>
+                    <div
+                      style={{
+                        background: "#f3f3f3",
+                        padding: "0.5rem",
+                        borderRadius: "0.25rem",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {todo.content}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSlotChange(index, null)}
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        Clear slot
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => deleteTodo(todo.id)}
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        Delete task
+                      </button>
+                    </div>
+                  </>
                 ) : (
-                  <div style={{ color: "#888", fontStyle: "italic" }}>
-                    No task selected
-                  </div>
+                  <>
+                    <div style={{ color: "#888", fontStyle: "italic" }}>
+                      No task selected
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => openTaskPicker(index)}
+                      style={{ fontSize: "0.9rem" }}
+                    >
+                      Pick a task
+                    </button>
+                  </>
                 )}
               </div>
             );
@@ -421,6 +575,139 @@ export function Dashboard() {
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
       </button>
+
+      {/* ===== Task Picker dialog ===== */}
+      {isTaskPickerOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
+          }}
+          onClick={closeTaskPicker}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              width: "100%",
+              maxWidth: "480px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0 }}>
+              Choose a task
+              {pickerSlotIndex !== null ? ` for slot ${pickerSlotIndex + 1}` : ""}
+            </h2>
+
+            {/* Household tasks for today first */}
+            {currentHouseholdId && (
+              <section style={{ marginBottom: "1rem" }}>
+                <h3 style={{ marginBottom: "0.5rem" }}>
+                  Household tasks for today
+                </h3>
+                {householdTasksToday.length === 0 ? (
+                  <p style={{ color: "#888", fontStyle: "italic" }}>
+                    No household tasks scheduled for today.
+                  </p>
+                ) : (
+                  <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                    {householdTasksToday.map((task) => (
+                      <li
+                        key={task.id}
+                        style={{
+                          border: "1px solid #ddd",
+                          borderRadius: "0.5rem",
+                          padding: "0.5rem 0.75rem",
+                          marginBottom: "0.5rem",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: "0.5rem",
+                          alignItems: "center",
+                          background: "#f9f9ff",
+                        }}
+                      >
+                        <span>{task.content}</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            claimHouseholdTaskIntoSlot(task)
+                          }
+                          style={{ fontSize: "0.85rem" }}
+                        >
+                          Claim &amp; use
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            )}
+
+            {/* Personal tasks */}
+            <section>
+              <h3 style={{ marginBottom: "0.5rem" }}>Your tasks</h3>
+              {personalTodosAvailable.length === 0 ? (
+                <p style={{ color: "#888", fontStyle: "italic" }}>
+                  No available personal tasks (they might all be in slots).
+                </p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {personalTodosAvailable.map((todo) => (
+                    <li
+                      key={todo.id}
+                      style={{
+                        border: "1px solid #ddd",
+                        borderRadius: "0.5rem",
+                        padding: "0.5rem 0.75rem",
+                        marginBottom: "0.5rem",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                        alignItems: "center",
+                      }}
+                    >
+                      <span>{todo.content}</span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          assignExistingTodoToSlot(todo.id)
+                        }
+                        style={{ fontSize: "0.85rem" }}
+                      >
+                        Use in slot
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: "1rem",
+              }}
+            >
+              <button type="button" onClick={closeTaskPicker}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== Todo dialog ===== */}
       {isTodoDialogOpen && (
@@ -575,9 +862,7 @@ export function Dashboard() {
             <select
               value={selectedMilestoneIdForUpdate ?? ""}
               onChange={(e) =>
-                setSelectedMilestoneIdForUpdate(
-                  e.target.value || null
-                )
+                setSelectedMilestoneIdForUpdate(e.target.value || null)
               }
               style={{
                 width: "100%",
