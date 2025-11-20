@@ -211,6 +211,20 @@ export function Dashboard() {
     await client.models.Todo.delete({ id });
   }
 
+  // Finished: delete todo + clear any slot using it
+  async function handleFinished(todoId: string) {
+    await deleteTodo(todoId);
+  }
+
+  // Do later: just clear that slot, keep todo
+  function handleDoLater(slotIndex: number) {
+    setActiveSlots((prev) => {
+      const copy = [...prev];
+      copy[slotIndex] = null;
+      return copy;
+    });
+  }
+
   // ===== TASK PICKER (slots) =====
   function openTaskPicker(slotIndex: number) {
     setTaskPickerSlotIndex(slotIndex);
@@ -446,24 +460,47 @@ export function Dashboard() {
                   padding: "1rem",
                   minHeight: "120px",
                   boxSizing: "border-box",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "0.5rem",
                 }}
               >
                 <h3>Slot {index + 1}</h3>
 
                 {todo ? (
-                  <div
-                    style={{
-                      background: "#f3f3f3",
-                      padding: "0.5rem",
-                      borderRadius: "0.25rem",
-                      cursor: "pointer",
-                      wordBreak: "break-word",
-                    }}
-                    onClick={() => deleteTodo(todo.id)}
-                    title="Click to delete this task"
-                  >
-                    {todo.content}
-                  </div>
+                  <>
+                    <div
+                      style={{
+                        background: "#f3f3f3",
+                        padding: "0.5rem",
+                        borderRadius: "0.25rem",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {todo.content}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        marginTop: "0.25rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleFinished(todo.id)}
+                      >
+                        Finished
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDoLater(index)}
+                      >
+                        Do Later
+                      </button>
+                    </div>
+                  </>
                 ) : (
                   <button
                     type="button"
@@ -711,7 +748,8 @@ export function Dashboard() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ marginTop: 0 }}>
-              Choose a task{taskPickerSlotIndex != null ? ` for slot ${taskPickerSlotIndex + 1}` : ""}
+              Choose a task
+              {taskPickerSlotIndex != null ? ` for slot ${taskPickerSlotIndex + 1}` : ""}
             </h2>
 
             {/* Household tasks for today first */}
