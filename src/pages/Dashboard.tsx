@@ -141,11 +141,13 @@ export function Dashboard() {
   );
 
   const { user, signOut } = useAuthenticator();
-
   const currentUserId =
     (user as any)?.userId ?? (user as any)?.username ?? null;
 
-  // ===== SUBSCRIPTIONS =====
+  const currentHouseholdId = membership?.householdId ?? null;
+  const todayStr = getTodayLocalISODate();
+
+  /* ===== SUBSCRIPTIONS ===== */
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
       next: (data: any) => setTodos([...data.items]),
@@ -178,15 +180,40 @@ export function Dashboard() {
     };
   }, []);
 
-  const currentHouseholdId = membership?.householdId ?? null;
+  /* ===== RESTORE ACTIVE PROJECT & SLOTS FROM LOCALSTORAGE ===== */
 
-  // ===== ACTIVE PROJECT PERSISTENCE =====
   useEffect(() => {
-    const stored = window.localStorage.getItem("activeProjectId");
-    if (stored) {
-      setActiveProjectId(stored);
+    // active project
+    const storedProject = window.localStorage.getItem("activeProjectId");
+    if (storedProject) {
+      setActiveProjectId(storedProject);
+    }
+
+    // active slots
+    const storedSlots = window.localStorage.getItem("dashboardActiveSlots");
+    if (storedSlots) {
+      try {
+        const parsed = JSON.parse(storedSlots) as Array<any>;
+        if (Array.isArray(parsed) && parsed.length === 3) {
+          const cleaned: Array<SlotTaskRef | null> = parsed.map((item) => {
+            if (
+              item &&
+              (item.kind === "todo" || item.kind === "household") &&
+              typeof item.id === "string"
+            ) {
+              return { kind: item.kind, id: item.id };
+            }
+            return null;
+          });
+          setActiveSlots(cleaned);
+        }
+      } catch {
+        // ignore bad data
+      }
     }
   }, []);
+
+  /* ===== PERSIST ACTIVE PROJECT & SLOTS ===== */
 
   useEffect(() => {
     if (activeProjectId) {
@@ -196,8 +223,14 @@ export function Dashboard() {
     }
   }, [activeProjectId]);
 
-  // ===== TODAY'S HOUSEHOLD TASKS (for slots) =====
-  const todayStr = getTodayLocalISODate();
+  useEffect(() => {
+    window.localStorage.setItem(
+      "dashboardActiveSlots",
+      JSON.stringify(activeSlots)
+    );
+  }, [activeSlots]);
+
+  /* ===== TODAY'S HOUSEHOLD TASKS (for slots) ===== */
 
   const todayHouseholdTasks = householdTasks.filter(
     (t) =>
@@ -224,7 +257,7 @@ export function Dashboard() {
   // Only household tasks that:
   // - are not completed
   // - are not already in another slot
-  // - and either unclaimed, or claimed by the current user (so you can re-pick your own)
+  // - and either unclaimed, or claimed by the current user
   const availableHouseholdTasks = todayHouseholdTasks.filter((t) => {
     if (activeHouseholdTaskIds.has(t.id)) return false;
     const claimedByUserId = (t as any).claimedByUserId as
@@ -236,12 +269,10 @@ export function Dashboard() {
   });
 
   // Personal todos that are not already in another slot
-  // (no "completed" field in Todo model anymore)
-  const availableTodos = todos.filter(
-    (t) => !activeTodoIds.has(t.id)
-  );
+  const availableTodos = todos.filter((t) => !activeTodoIds.has(t.id));
 
-  // ===== TODOS =====
+  /* ===== TODOS ===== */
+
   function openTodoDialog() {
     setNewTodoContent("");
     setIsTodoDialogOpen(true);
@@ -296,11 +327,12 @@ export function Dashboard() {
   }
 
   function handleSlotDoLater(slotIndex: number) {
-    // Just free the slot; underlying task stays the same (still claimed if household)
+    // Just free the slot; underlying task stays the same
     clearSlot(slotIndex);
   }
 
-  // ===== PROJECTS (create + active project only) =====
+  /* ===== PROJECTS (create + active project only) ===== */
+
   function openProjectDialog() {
     setNewProjectName("");
     setIsProjectDialogOpen(true);
@@ -320,7 +352,8 @@ export function Dashboard() {
     setIsProjectDialogOpen(false);
   }
 
-  // ===== ACTIVE PROJECT DERIVED DATA =====
+  /* ===== ACTIVE PROJECT DERIVED DATA ===== */
+
   const activeProject =
     activeProjectId != null
       ? projects.find((p) => p.id === activeProjectId) ?? null
@@ -330,7 +363,8 @@ export function Dashboard() {
     ? milestones.filter((m) => m.projectId === activeProject.id)
     : [];
 
-  // ===== UPDATE (for active project) =====
+  /* ===== UPDATE (for active project) ===== */
+
   function openUpdateDialog() {
     if (!activeProject || activeProjectMilestones.length === 0) return;
     const firstMilestone = activeProjectMilestones[0];
@@ -405,7 +439,8 @@ export function Dashboard() {
     }
   }
 
-  // ===== TASK PICKER =====
+  /* ===== TASK PICKER ===== */
+
   function openTaskPicker(slotIndex: number) {
     setTaskPickerSlotIndex(slotIndex);
     setIsTaskPickerOpen(true);
@@ -419,8 +454,7 @@ export function Dashboard() {
   async function handleSelectTaskForSlot(ref: SlotTaskRef) {
     if (taskPickerSlotIndex == null) return;
 
-    // If user picks a household task, link it, don't copy:
-    // - set claimedByUserId on the HouseholdTask (if we have a logged-in user)
+    // For a household task, link it & mark claimedByUserId (no copy)
     if (ref.kind === "household" && currentUserId) {
       const task = householdTasks.find((t) => t.id === ref.id);
       if (task) {
@@ -534,6 +568,8 @@ export function Dashboard() {
       </div>
     );
   }
+
+  /* ===================== RENDER ===================== */
 
   return (
     <main
