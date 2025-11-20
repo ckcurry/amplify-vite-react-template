@@ -1,3 +1,4 @@
+// amplify/data/resource.ts
 import { type ClientSchema, a, defineData } from "@aws-amplify/backend";
 
 const schema = a.schema({
@@ -54,30 +55,20 @@ const schema = a.schema({
 
   HouseholdTask: a
     .model({
-      // you can keep this explicit id or omit it (Amplify will add `id` automatically)
       id: a.id().required(),
-  
-      // 🔑 Foreign key that matches Household.tasks hasMany("HouseholdTask", "householdId")
-      householdId: a.id().required(),
-  
-      // 🔗 Relationship back to Household
-      household: a.belongsTo("Household", "householdId"),
-  
+      householdId: a.string().required(),
       content: a.string().required(),
       completed: a.boolean().required(),
-  
-      // You're treating scheduledFor as "YYYY-MM-DD" in the frontend helper,
-      // so make this a string instead of a date for maximum compatibility:
-      scheduledFor: a.string().required(),
-  
-      // recurrence enum (no default in schema, you handle it in React)
-      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
-  
-      // make this optional; stored as a string date "YYYY-MM-DD" or null
-      recurrenceEndDate: a.string(),
-    })
-  .authorization((allow) => [allow.owner()]),
+      scheduledFor: a.date().required(),
 
+      // recurrence info
+      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
+      recurrenceEndDate: a.date(),
+
+      // NEW: who claimed this task (optional)
+      claimedByUserId: a.string(),
+    })
+    .authorization((allow) => [allow.owner()]),
 
   HouseholdMembership: a
     .model({
@@ -93,12 +84,11 @@ const schema = a.schema({
 
       name: a.string().required(),
 
-      // 🔹 NEW: each household project has many milestones
+      // each household project has many milestones
       milestones: a.hasMany("HouseholdMilestone", "projectId"),
     })
     .authorization((allow) => [allow.authenticated()]),
 
-  // 🔹 NEW: household project milestones
   HouseholdMilestone: a
     .model({
       title: a.string().required(),
@@ -109,12 +99,10 @@ const schema = a.schema({
       dueDate: a.date(),
       completed: a.boolean().default(false),
 
-      // each milestone can have many updates
       updates: a.hasMany("HouseholdMilestoneUpdate", "milestoneId"),
     })
     .authorization((allow) => [allow.authenticated()]),
 
-  // 🔹 NEW: household milestone updates (with video, like your main app)
   HouseholdMilestoneUpdate: a
     .model({
       milestoneId: a.id().required(),
@@ -125,7 +113,6 @@ const schema = a.schema({
       note: a.string(),
     })
     .authorization((allow) => [allow.authenticated()]),
-
 });
 
 export type Schema = ClientSchema<typeof schema>;
@@ -133,13 +120,6 @@ export type Schema = ClientSchema<typeof schema>;
 export const data = defineData({
   schema,
   authorizationModes: {
-    // ⭐ Use the signed-in user (Cognito user pool) by default
     defaultAuthorizationMode: "userPool",
-    // If you no longer need public API access, you can remove the apiKey block completely.
-    // If you DO need an API key for something else, leave it but it won't apply to these
-    // models because they only allow owner().
-    // apiKeyAuthorizationMode: {
-    //   expiresInDays: 30,
-    // },
   },
 });
