@@ -115,7 +115,8 @@ export function Dashboard() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
 
-  const { signOut } = useAuthenticator();
+  const { user, signOut } = useAuthenticator();
+  const currentUserId = user?.userId ?? user?.username ?? null;
 
   // subscribe to data
   useEffect(() => {
@@ -239,16 +240,19 @@ export function Dashboard() {
   const currentHouseholdId = householdMembership?.householdId ?? null;
   const todayIso = getTodayLocalIso();
 
-  // Only household tasks for *today* (including recurrence)
+  // Only household tasks for *today* that are *not completed* and *not claimed*
   const householdTasksToday =
     currentHouseholdId == null
       ? []
-      : householdTasks.filter(
-          (t) =>
+      : householdTasks.filter((t) => {
+          const claimedBy = (t as any).claimedByUserId as string | null | undefined;
+          return (
             t.householdId === currentHouseholdId &&
             !t.completed &&
+            !claimedBy &&
             occursOnDate(t, todayIso)
-        );
+          );
+        });
 
   // Personal todos that are not already in any slot
   const claimedTodoIds = new Set(activeSlots.filter(Boolean) as string[]);
@@ -262,7 +266,15 @@ export function Dashboard() {
     const householdTask = householdTasksToday.find((t) => t.id === taskId);
 
     if (householdTask) {
-      // Claim it by creating a personal todo, and mark the household task completed
+      // ✅ Link this household task to the current user via claimedByUserId
+      if (currentUserId) {
+        await client.models.HouseholdTask.update({
+          id: householdTask.id,
+          claimedByUserId: currentUserId,
+        });
+      }
+
+      // ✅ Also create a personal todo for this user so it lives in their dashboard
       const { data: created } = await client.models.Todo.create({
         content: householdTask.content,
       });
@@ -272,11 +284,6 @@ export function Dashboard() {
           const copy = [...prev];
           copy[taskPickerSlotIndex] = created.id;
           return copy;
-        });
-
-        await client.models.HouseholdTask.update({
-          id: householdTask.id,
-          completed: true,
         });
       }
 
