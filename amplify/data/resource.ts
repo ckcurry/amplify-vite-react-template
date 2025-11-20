@@ -36,7 +36,7 @@ const schema = a.schema({
       milestoneId: a.id().required(),
       milestone: a.belongsTo("Milestone", "milestoneId"),
 
-      videoUrl: a.string().required(),        // storage path
+      videoUrl: a.string().required(), // storage path
       durationSeconds: a.integer().required(),
       note: a.string(),
     })
@@ -55,8 +55,13 @@ const schema = a.schema({
 
   HouseholdTask: a
     .model({
+      // id is fine to keep explicit, but Amplify will also add one automatically
       id: a.id().required(),
-      householdId: a.string().required(),
+
+      // IMPORTANT: this must be an id() and have a belongsTo
+      householdId: a.id().required(),
+      household: a.belongsTo("Household", "householdId"),
+
       content: a.string().required(),
       completed: a.boolean().required(),
       scheduledFor: a.date().required(),
@@ -65,7 +70,7 @@ const schema = a.schema({
       recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
       recurrenceEndDate: a.date(),
 
-      // NEW: who claimed this task (optional)
+      // who claimed this task (optional)
       claimedByUserId: a.string(),
     })
     .authorization((allow) => [allow.owner()]),
