@@ -5,20 +5,25 @@ import { uploadData } from "aws-amplify/storage";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
-/* ===================== Helpers & types ===================== */
+/* ===================== TYPES ===================== */
+
+type SlotTaskRef =
+  | { kind: "todo"; id: string }
+  | { kind: "household"; id: string };
 
 type RecurrenceType = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
 
-// Get today's date in local time as YYYY-MM-DD
-function getTodayLocalIso(): string {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+/* ===================== HELPERS ===================== */
+
+// Local "today" in YYYY-MM-DD (fixes the "tomorrow" bug)
+function getTodayLocalISODate(): string {
+  const now = new Date();
+  const offsetMs = now.getTimezoneOffset() * 60 * 1000;
+  const local = new Date(now.getTime() - offsetMs);
+  return local.toISOString().slice(0, 10);
 }
 
-// Recurrence check (matches HouseholdHome logic)
+// Recurrence logic reused for household tasks (same idea as HouseholdHome)
 function occursOnDate(
   task: Schema["HouseholdTask"]["type"],
   dateStr: string
@@ -32,7 +37,6 @@ function occursOnDate(
     return false;
   }
 
-  // Only in/after start date
   if (target < base) return false;
 
   const rec: RecurrenceType =
@@ -52,7 +56,9 @@ function occursOnDate(
   }
 
   const msPerDay = 1000 * 60 * 60 * 24;
-  const diffDays = Math.round((target.getTime() - base.getTime()) / msPerDay);
+  const diffDays = Math.round(
+    (target.getTime() - base.getTime()) / msPerDay
+  );
   if (diffDays < 0) return false;
 
   if (rec === "WEEKLY") {
@@ -66,17 +72,36 @@ function occursOnDate(
   return false;
 }
 
+// Helper: get video duration
+async function getVideoDurationInSeconds(file: File): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+
+    video.onloadedmetadata = () => {
+      window.URL.revokeObjectURL(video.src);
+      resolve(video.duration);
+    };
+
+    video.onerror = () => {
+      reject(new Error("Failed to load video metadata"));
+    };
+
+    video.src = URL.createObjectURL(file);
+  });
+}
+
 /* ===================== DASHBOARD ===================== */
 
 export function Dashboard() {
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
-  const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
+  const [projects, setProjects] =
+    useState<Array<Schema["Project"]["type"]>>([]);
   const [milestones, setMilestones] = useState<
     Array<Schema["Milestone"]["type"]>
   >([]);
 
-  // Household membership + tasks
-  const [householdMembership, setHouseholdMembership] =
+  const [membership, setMembership] =
     useState<Schema["HouseholdMembership"]["type"] | null>(null);
   const [householdTasks, setHouseholdTasks] = useState<
     Array<Schema["HouseholdTask"]["type"]>
@@ -90,23 +115,17 @@ export function Dashboard() {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
 
-  // 3 active task slots (Todo IDs)
-  const [activeSlots, setActiveSlots] = useState<Array<string | null>>([
+  // 3 active task slots (linked tasks, not copies)
+  const [activeSlots, setActiveSlots] = useState<Array<SlotTaskRef | null>>([
     null,
     null,
     null,
   ]);
 
-  // Task picker dialog (for slots)
-  const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
-  const [taskPickerSlotIndex, setTaskPickerSlotIndex] = useState<number | null>(
-    null
-  );
-
   // Active project for the dashboard
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
 
-  // ===== Update dialog for active project =====
+  // Update dialog for active project
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false);
   const [selectedMilestoneIdForUpdate, setSelectedMilestoneIdForUpdate] =
     useState<string | null>(null);
@@ -115,10 +134,18 @@ export function Dashboard() {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
 
-  const { user, signOut } = useAuthenticator();
-  const currentUserId = user?.userId ?? user?.username ?? null;
+  // Task picker dialog (for slots)
+  const [isTaskPickerOpen, setIsTaskPickerOpen] = useState(false);
+  const [taskPickerSlotIndex, setTaskPickerSlotIndex] = useState<number | null>(
+    null
+  );
 
-  // subscribe to data
+  const { user, signOut } = useAuthenticator();
+
+  const currentUserId =
+    (user as any)?.userId ?? (user as any)?.username ?? null;
+
+  // ===== SUBSCRIPTIONS =====
   useEffect(() => {
     const todoSub = client.models.Todo.observeQuery().subscribe({
       next: (data: any) => setTodos([...data.items]),
@@ -134,7 +161,7 @@ export function Dashboard() {
 
     const membershipSub =
       client.models.HouseholdMembership.observeQuery().subscribe({
-        next: (data: any) => setHouseholdMembership(data.items[0] ?? null),
+        next: (data: any) => setMembership(data.items[0] ?? null),
       });
 
     const householdTaskSub =
@@ -151,7 +178,9 @@ export function Dashboard() {
     };
   }, []);
 
-  // Load active project from localStorage on first render
+  const currentHouseholdId = membership?.householdId ?? null;
+
+  // ===== ACTIVE PROJECT PERSISTENCE =====
   useEffect(() => {
     const stored = window.localStorage.getItem("activeProjectId");
     if (stored) {
@@ -159,7 +188,6 @@ export function Dashboard() {
     }
   }, []);
 
-  // Persist active project selection
   useEffect(() => {
     if (activeProjectId) {
       window.localStorage.setItem("activeProjectId", activeProjectId);
@@ -168,24 +196,49 @@ export function Dashboard() {
     }
   }, [activeProjectId]);
 
-  // ===== helper: video duration =====
-  async function getVideoDurationInSeconds(file: File): Promise<number> {
-    return new Promise((resolve, reject) => {
-      const video = document.createElement("video");
-      video.preload = "metadata";
+  // ===== TODAY'S HOUSEHOLD TASKS (for slots) =====
+  const todayStr = getTodayLocalISODate();
 
-      video.onloadedmetadata = () => {
-        window.URL.revokeObjectURL(video.src);
-        resolve(video.duration);
-      };
+  const todayHouseholdTasks = householdTasks.filter(
+    (t) =>
+      t.householdId === currentHouseholdId &&
+      !t.completed &&
+      occursOnDate(t, todayStr)
+  );
 
-      video.onerror = () => {
-        reject(new Error("Failed to load video metadata"));
-      };
+  // Filter out tasks that are already in another slot
+  const activeHouseholdTaskIds = new Set(
+    activeSlots
+      .filter((r): r is SlotTaskRef => r != null)
+      .filter((r) => r.kind === "household")
+      .map((r) => r.id)
+  );
 
-      video.src = URL.createObjectURL(file);
-    });
-  }
+  const activeTodoIds = new Set(
+    activeSlots
+      .filter((r): r is SlotTaskRef => r != null)
+      .filter((r) => r.kind === "todo")
+      .map((r) => r.id)
+  );
+
+  // Only household tasks that:
+  // - are not completed
+  // - are not already in another slot
+  // - and either unclaimed, or claimed by the current user (so you can re-pick your own)
+  const availableHouseholdTasks = todayHouseholdTasks.filter((t) => {
+    if (activeHouseholdTaskIds.has(t.id)) return false;
+    const claimedByUserId = (t as any).claimedByUserId as
+      | string
+      | null
+      | undefined;
+    if (!claimedByUserId) return true;
+    return claimedByUserId === currentUserId;
+  });
+
+  // Personal todos that are not completed and not already in another slot
+  const availableTodos = todos.filter(
+    (t) => !t.completed && !activeTodoIds.has(t.id)
+  );
 
   // ===== TODOS =====
   function openTodoDialog() {
@@ -207,18 +260,7 @@ export function Dashboard() {
     setIsTodoDialogOpen(false);
   }
 
-  async function deleteTodo(id: string) {
-    setActiveSlots((prev) => prev.map((slotId) => (slotId === id ? null : slotId)));
-    await client.models.Todo.delete({ id });
-  }
-
-  // Finished: delete todo + clear any slot using it
-  async function handleFinished(todoId: string) {
-    await deleteTodo(todoId);
-  }
-
-  // Do later: just clear that slot, keep todo
-  function handleDoLater(slotIndex: number) {
+  function clearSlot(slotIndex: number) {
     setActiveSlots((prev) => {
       const copy = [...prev];
       copy[slotIndex] = null;
@@ -226,82 +268,46 @@ export function Dashboard() {
     });
   }
 
-  // ===== TASK PICKER (slots) =====
-  function openTaskPicker(slotIndex: number) {
-    setTaskPickerSlotIndex(slotIndex);
-    setIsTaskPickerOpen(true);
+  async function handleSlotFinished(slotIndex: number) {
+    const ref = activeSlots[slotIndex];
+    if (!ref) return;
+
+    try {
+      if (ref.kind === "todo") {
+        const todo = todos.find((t) => t.id === ref.id);
+        if (todo) {
+          await client.models.Todo.update({
+            id: todo.id,
+            completed: true,
+          });
+        }
+      } else {
+        const task = householdTasks.find((t) => t.id === ref.id);
+        if (task) {
+          await client.models.HouseholdTask.update({
+            id: task.id,
+            completed: true,
+          });
+        }
+      }
+    } finally {
+      clearSlot(slotIndex);
+    }
   }
 
-  function closeTaskPicker() {
-    setTaskPickerSlotIndex(null);
-    setIsTaskPickerOpen(false);
+  function handleSlotDoLater(slotIndex: number) {
+    // Just free the slot; underlying task stays the same (still claimed if household)
+    clearSlot(slotIndex);
   }
 
-  const currentHouseholdId = householdMembership?.householdId ?? null;
-  const todayIso = getTodayLocalIso();
-
-  // Only household tasks for *today* that are *not completed* and *not claimed*
-  const householdTasksToday =
-    currentHouseholdId == null
-      ? []
-      : householdTasks.filter((t) => {
-          const claimedBy = (t as any).claimedByUserId as string | null | undefined;
-          return (
-            t.householdId === currentHouseholdId &&
-            !t.completed &&
-            !claimedBy &&
-            occursOnDate(t, todayIso)
-          );
-        });
-
-  // Personal todos that are not already in any slot
-  const claimedTodoIds = new Set(activeSlots.filter(Boolean) as string[]);
-  const unclaimedTodos = todos.filter((t) => !claimedTodoIds.has(t.id));
-
-  // When user clicks a task in the picker
-  async function handleChooseTask(taskId: string) {
-    if (taskPickerSlotIndex == null) return;
-
-    // 1) Check if it's a household task for today
-    const householdTask = householdTasksToday.find((t) => t.id === taskId);
-
-    if (householdTask) {
-      // ✅ Link this household task to the current user via claimedByUserId
-      if (currentUserId) {
-        await client.models.HouseholdTask.update({
-          id: householdTask.id,
-          claimedByUserId: currentUserId,
-        });
-      }
-
-      // ✅ Also create a personal todo for this user so it lives in their dashboard
-      const { data: created } = await client.models.Todo.create({
-        content: householdTask.content,
-      });
-
-      if (created) {
-        setActiveSlots((prev) => {
-          const copy = [...prev];
-          copy[taskPickerSlotIndex] = created.id;
-          return copy;
-        });
-      }
-
-      closeTaskPicker();
-      return;
-    }
-
-    // 2) Otherwise, assume it's a personal todo
-    const todo = unclaimedTodos.find((t) => t.id === taskId);
-    if (todo) {
-      setActiveSlots((prev) => {
-        const copy = [...prev];
-        copy[taskPickerSlotIndex] = todo.id;
-        return copy;
-      });
-    }
-
-    closeTaskPicker();
+  async function deleteTodo(id: string) {
+    // If any slot was referencing this todo, clear it
+    setActiveSlots((prev) =>
+      prev.map((ref) =>
+        ref && ref.kind === "todo" && ref.id === id ? null : ref
+      )
+    );
+    await client.models.Todo.delete({ id });
   }
 
   // ===== PROJECTS (create + active project only) =====
@@ -409,6 +415,136 @@ export function Dashboard() {
     }
   }
 
+  // ===== TASK PICKER =====
+  function openTaskPicker(slotIndex: number) {
+    setTaskPickerSlotIndex(slotIndex);
+    setIsTaskPickerOpen(true);
+  }
+
+  function closeTaskPicker() {
+    setIsTaskPickerOpen(false);
+    setTaskPickerSlotIndex(null);
+  }
+
+  async function handleSelectTaskForSlot(ref: SlotTaskRef) {
+    if (taskPickerSlotIndex == null) return;
+
+    // If user picks a household task, link it, don't copy:
+    // - set claimedByUserId on the HouseholdTask (if we have a logged-in user)
+    if (ref.kind === "household" && currentUserId) {
+      const task = householdTasks.find((t) => t.id === ref.id);
+      if (task) {
+        const claimedByUserId = (task as any).claimedByUserId as
+          | string
+          | null
+          | undefined;
+        if (claimedByUserId !== currentUserId) {
+          await client.models.HouseholdTask.update({
+            id: task.id,
+            claimedByUserId: currentUserId,
+          });
+        }
+      }
+    }
+
+    setActiveSlots((prev) => {
+      const copy = [...prev];
+      copy[taskPickerSlotIndex] = ref;
+      return copy;
+    });
+
+    closeTaskPicker();
+  }
+
+  function renderSlotContent(slotIndex: number) {
+    const ref = activeSlots[slotIndex];
+
+    if (!ref) {
+      // Empty slot → show button to open task picker
+      return (
+        <button
+          type="button"
+          onClick={() => openTaskPicker(slotIndex)}
+          style={{ width: "100%" }}
+        >
+          Choose task
+        </button>
+      );
+    }
+
+    let label = "";
+    let isHousehold = false;
+
+    if (ref.kind === "todo") {
+      const todo = todos.find((t) => t.id === ref.id);
+      label = todo?.content ?? "(missing task)";
+      isHousehold = false;
+    } else {
+      const task = householdTasks.find((t) => t.id === ref.id);
+      label = task?.content ?? "(missing household task)";
+      isHousehold = true;
+    }
+
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "0.5rem",
+        }}
+      >
+        <div
+          style={{
+            background: "#f3f3f3",
+            padding: "0.5rem",
+            borderRadius: "0.25rem",
+            wordBreak: "break-word",
+          }}
+        >
+          <div style={{ fontSize: "0.9rem", marginBottom: "0.25rem" }}>
+            {label}
+          </div>
+          {isHousehold && (
+            <span
+              style={{
+                fontSize: "0.75rem",
+                padding: "0.1rem 0.45rem",
+                borderRadius: "999px",
+                backgroundColor: "#e0f5ff",
+                color: "#005b86",
+                border: "1px solid #9ad4ff",
+              }}
+            >
+              household task
+            </span>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: "0.5rem",
+            justifyContent: "flex-end",
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => handleSlotFinished(slotIndex)}
+          >
+            Finished
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSlotDoLater(slotIndex)}
+          >
+            Do later
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <main
       style={{
@@ -453,76 +589,21 @@ export function Dashboard() {
             gap: "1rem",
           }}
         >
-          {activeSlots.map((slotTodoId, index) => {
-            const todo = slotTodoId
-              ? todos.find((t) => t.id === slotTodoId)
-              : null;
-
-            return (
-              <div
-                key={index}
-                style={{
-                  border: "1px solid #ccc",
-                  borderRadius: "0.5rem",
-                  padding: "1rem",
-                  minHeight: "120px",
-                  boxSizing: "border-box",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.5rem",
-                }}
-              >
-                <h3>Slot {index + 1}</h3>
-
-                {todo ? (
-                  <>
-                    <div
-                      style={{
-                        background: "#f3f3f3",
-                        padding: "0.5rem",
-                        borderRadius: "0.25rem",
-                        wordBreak: "break-word",
-                      }}
-                    >
-                      {todo.content}
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "0.5rem",
-                        marginTop: "0.25rem",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleFinished(todo.id)}
-                      >
-                        Finished
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDoLater(index)}
-                      >
-                        Do Later
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => openTaskPicker(index)}
-                    style={{
-                      marginTop: "0.5rem",
-                      width: "100%",
-                    }}
-                  >
-                    + choose task
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          {activeSlots.map((_, index) => (
+            <div
+              key={index}
+              style={{
+                border: "1px solid #ccc",
+                borderRadius: "0.5rem",
+                padding: "1rem",
+                minHeight: "120px",
+                boxSizing: "border-box",
+              }}
+            >
+              <h3>Slot {index + 1}</h3>
+              {renderSlotContent(index)}
+            </div>
+          ))}
         </div>
       </section>
 
@@ -724,132 +805,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ===== Task picker dialog ===== */}
-      {isTaskPickerOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-            padding: "1rem",
-            boxSizing: "border-box",
-          }}
-          onClick={closeTaskPicker}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              width: "100%",
-              maxWidth: "480px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-              boxSizing: "border-box",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>
-              Choose a task
-              {taskPickerSlotIndex != null ? ` for slot ${taskPickerSlotIndex + 1}` : ""}
-            </h2>
-
-            {/* Household tasks for today first */}
-            <section style={{ marginBottom: "1rem" }}>
-              <h3>Household tasks for today</h3>
-              {householdTasksToday.length === 0 ? (
-                <p style={{ color: "#888", fontStyle: "italic" }}>
-                  No household tasks for today.
-                </p>
-              ) : (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: 0,
-                  }}
-                >
-                  {householdTasksToday.map((t) => (
-                    <li
-                      key={t.id}
-                      style={{
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleChooseTask(t.id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                        }}
-                      >
-                        🏠 {t.content}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            {/* Personal todos */}
-            <section>
-              <h3>Your tasks</h3>
-              {unclaimedTodos.length === 0 ? (
-                <p style={{ color: "#888", fontStyle: "italic" }}>
-                  No available personal tasks.
-                </p>
-              ) : (
-                <ul
-                  style={{
-                    listStyle: "none",
-                    padding: 0,
-                    margin: 0,
-                  }}
-                >
-                  {unclaimedTodos.map((t) => (
-                    <li
-                      key={t.id}
-                      style={{
-                        marginBottom: "0.25rem",
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleChooseTask(t.id)}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                        }}
-                      >
-                        {t.content}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <div
-              style={{
-                marginTop: "1rem",
-                display: "flex",
-                justifyContent: "flex-end",
-              }}
-            >
-              <button type="button" onClick={closeTaskPicker}>
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ===== Update dialog (for active project) ===== */}
       {isUpdateDialogOpen && activeProject && (
         <div
@@ -963,6 +918,144 @@ export function Dashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Task picker dialog ===== */}
+      {isTaskPickerOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0, 0, 0, 0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
+          }}
+          onClick={closeTaskPicker}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.5rem",
+              borderRadius: "0.5rem",
+              width: "100%",
+              maxWidth: "480px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+              boxSizing: "border-box",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 style={{ marginTop: 0, marginBottom: "0.75rem" }}>
+              Choose a task
+            </h2>
+
+            {/* Household tasks for today */}
+            <section style={{ marginBottom: "1rem" }}>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  marginTop: 0,
+                  marginBottom: "0.5rem",
+                }}
+              >
+                Today&apos;s household tasks
+              </h3>
+              {availableHouseholdTasks.length === 0 ? (
+                <p style={{ color: "#888", fontStyle: "italic" }}>
+                  No household tasks available for today.
+                </p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {availableHouseholdTasks.map((t) => (
+                    <li
+                      key={t.id}
+                      style={{
+                        marginBottom: "0.35rem",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSelectTaskForSlot({
+                            kind: "household",
+                            id: t.id,
+                          })
+                        }
+                        style={{
+                          width: "100%",
+                          textAlign: "left",
+                          backgroundColor: "#f7fbff",
+                          borderColor: "#c4ddff",
+                        }}
+                      >
+                        {t.content}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Personal tasks */}
+            <section>
+              <h3
+                style={{
+                  fontSize: "1rem",
+                  marginTop: 0,
+                  marginBottom: "0.5rem",
+                }}
+              >
+                Your personal tasks
+              </h3>
+              {availableTodos.length === 0 ? (
+                <p style={{ color: "#888", fontStyle: "italic" }}>
+                  No personal tasks available.
+                </p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {availableTodos.map((t) => (
+                    <li
+                      key={t.id}
+                      style={{
+                        marginBottom: "0.35rem",
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleSelectTaskForSlot({
+                            kind: "todo",
+                            id: t.id,
+                          })
+                        }
+                        style={{ width: "100%", textAlign: "left" }}
+                      >
+                        {t.content}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: "1rem",
+              }}
+            >
+              <button type="button" onClick={closeTaskPicker}>
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
