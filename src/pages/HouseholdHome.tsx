@@ -54,6 +54,15 @@ export function HouseholdHome() {
     };
   }, []);
 
+  function getTaskColor(task: Schema["HouseholdTask"]["type"]): string {
+    if (task.completed) return "#22c55e";
+
+    const rec = (task as any).recurrence as RecurrenceType | undefined;
+    if (rec && rec != "NONE") return "#f97316"
+
+    return "#6366f1"
+  }
+
   const currentHouseholdId = membership?.householdId ?? null;
   const currentHousehold =
     currentHouseholdId != null
@@ -435,13 +444,14 @@ export function HouseholdHome() {
                 }
 
                 const isSelected = cell.dateString === selectedDate;
-                const hasTasks =
-                  currentHouseholdId != null &&
-                  householdTasks.some(
-                    (t) =>
-                      t.householdId === currentHouseholdId &&
-                      occursOnDate(t, cell.dateString!)
-                  );
+                const tasksOnThisDay =
+                  currentHouseholdId != null
+                    ? householdTasks.filter(
+                        (t) =>
+                          t.householdId === currentHouseholdId &&
+                        occursOnDate(t, cell.dateString!)
+                      )
+                    : [];
 
                 return (
                   <button
@@ -464,16 +474,29 @@ export function HouseholdHome() {
                     }}
                   >
                     <span>{cell.dayNumber}</span>
-                    {hasTasks && (
-                      <span
+                    {tasksOnThisDay.length > 0 && (
+                      <div
                         style={{
-                          width: "6px",
-                          height: "6px",
-                          borderRadius: "50%",
-                          backgroundColor: "#646cff",
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "2px",
                           marginTop: "3px",
+                          justifyContent: "center",
+                          maxWidth: "100%"
                         }}
-                      />
+                      >
+                        {tasksOnThisDay.slice(0, 6).map((t) => (
+                          <span
+                            style={{
+                              width: "6px",
+                              height: "6px",
+                              borderRadius: "50%",
+                              backgroundColor: getTaskColor(t),
+                              marginTop: "3px",
+                            }}
+                          />
+                        ))}
+                      </div>
                     )}
                   </button>
                 );

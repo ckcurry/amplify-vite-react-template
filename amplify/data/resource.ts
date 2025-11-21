@@ -53,6 +53,14 @@ const schema = a.schema({
     })
     .authorization((allow) => [allow.authenticated()]),
 
+  ActiveTaskSlot: a
+    .model({
+      slotIndex: a.integer().required(),
+      source: a.enum(["TODO", "HOUSEHOLD"]),
+      taskId: a.string().required(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
   HouseholdTask: a
     .model({
       // id is fine to keep explicit, but Amplify will also add one automatically
@@ -73,7 +81,7 @@ const schema = a.schema({
       // who claimed this task (optional)
       claimedByUserId: a.string(),
     })
-    .authorization((allow) => [allow.owner()]),
+    .authorization((allow) => [allow.authenticated()]),
 
   HouseholdMembership: a
     .model({
