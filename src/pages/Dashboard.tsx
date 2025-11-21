@@ -25,7 +25,7 @@ function getTodayLocalDateString(): string {
 /* ===================== DASHBOARD ===================== */
 
 export function Dashboard() {
-  const { user, signOut } = useAuthenticator();
+  const { signOut } = useAuthenticator();
 
   const [todos, setTodos] = useState<Array<Schema["Todo"]["type"]>>([]);
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
