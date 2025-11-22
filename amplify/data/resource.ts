@@ -16,7 +16,11 @@ const schema = a.schema({
       name: a.string().required(),
       milestones: a.hasMany("Milestone", "projectId"),
     })
-    .authorization((allow) => [allow.owner()]),
+    .authorization((allow) => [
+      allow.owner(),
+      // Let other signed-in household members read personal projects for member news
+      allow.authenticated().to(["read"]),
+    ]),
 
   // Each project has many milestones; still owned by the same user
   Milestone: a
@@ -28,7 +32,10 @@ const schema = a.schema({
       completed: a.boolean(),
       updates: a.hasMany("MilestoneUpdate", "milestoneId"),
     })
-    .authorization((allow) => [allow.owner()]),
+    .authorization((allow) => [
+      allow.owner(),
+      allow.authenticated().to(["read"]),
+    ]),
 
   // Each milestone can have many video updates
   MilestoneUpdate: a
@@ -40,7 +47,10 @@ const schema = a.schema({
       durationSeconds: a.integer().required(),
       note: a.string(),
     })
-    .authorization((allow) => [allow.owner()]),
+    .authorization((allow) => [
+      allow.owner(),
+      allow.authenticated().to(["read"]),
+    ]),
 
   Household: a
     .model({
