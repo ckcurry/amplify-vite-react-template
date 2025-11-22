@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { uploadData } from "aws-amplify/storage";
+import { getCurrentUser } from "aws-amplify/auth";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
@@ -69,6 +70,7 @@ export function Dashboard() {
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const today = useMemo(() => getTodayLocalDateString(), []);
 
@@ -106,6 +108,22 @@ export function Dashboard() {
       milestoneSub.unsubscribe();
       membershipSub.unsubscribe();
       householdTaskSub.unsubscribe();
+    };
+  }, []);
+
+  // Get signed-in user id to filter personal projects
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentUser()
+      .then((user) => {
+        if (!cancelled) setCurrentUserId(user.userId);
+      })
+      .catch((err) => {
+        console.error("Failed to load current user", err);
+        if (!cancelled) setCurrentUserId(null);
+      });
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -299,9 +317,22 @@ export function Dashboard() {
     setIsProjectDialogOpen(false);
   }
 
+  const myProjects = useMemo(() => {
+    if (!currentUserId) return [];
+    return projects.filter(
+      (p) => (p as any).owner === currentUserId || (p as any).createdBy === currentUserId
+    );
+  }, [projects, currentUserId]);
+
+  useEffect(() => {
+    if (activeProjectId && !myProjects.some((p) => p.id === activeProjectId)) {
+      setActiveProjectId(null);
+    }
+  }, [activeProjectId, myProjects]);
+
   const activeProject =
     activeProjectId != null
-      ? projects.find((p) => p.id === activeProjectId) ?? null
+      ? myProjects.find((p) => p.id === activeProjectId) ?? null
       : null;
 
   const activeProjectMilestones = activeProject
@@ -556,7 +587,7 @@ export function Dashboard() {
       <section style={{ marginBottom: "2rem" }}>
         <h2>Active Project</h2>
 
-        {projects.length === 0 ? (
+        {myProjects.length === 0 ? (
           <p style={{ color: "#888", fontStyle: "italic" }}>
             No projects yet. Create a project to choose an active one.
           </p>
@@ -572,7 +603,7 @@ export function Dashboard() {
               }}
             >
               <option value="">-- Select active project --</option>
-              {projects.map((p) => (
+              {myProjects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
                 </option>

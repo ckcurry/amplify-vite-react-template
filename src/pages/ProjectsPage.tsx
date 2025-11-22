@@ -1,6 +1,7 @@
 // src/pages/ProjectsPage.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { uploadData, getUrl } from "aws-amplify/storage";
+import { getCurrentUser } from "aws-amplify/auth";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
@@ -12,6 +13,7 @@ export function ProjectsPage() {
   const [updates, setUpdates] = useState<
     Array<Schema["MilestoneUpdate"]["type"]>
   >([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   // signed URLs for update videos
   const [updateVideoUrls, setUpdateVideoUrls] = useState<
@@ -58,6 +60,22 @@ export function ProjectsPage() {
     };
   }, []);
 
+  // get current signed-in user's id (owner field)
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentUser()
+      .then((user) => {
+        if (!cancelled) setCurrentUserId(user.userId);
+      })
+      .catch((err) => {
+        console.error("Failed to load current user", err);
+        if (!cancelled) setCurrentUserId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // load signed video URLs for updates
   useEffect(() => {
     if (updates.length === 0) return;
@@ -94,6 +112,14 @@ export function ProjectsPage() {
       cancelled = true;
     };
   }, [updates, updateVideoUrls]);
+
+  // Filter to only the current user's projects/milestones/updates
+  const myProjects = useMemo(() => {
+    if (!currentUserId) return [];
+    return projects.filter(
+      (p) => (p as any).owner === currentUserId || (p as any).createdBy === currentUserId
+    );
+  }, [projects, currentUserId]);
 
   // helper: video duration
   async function getVideoDurationInSeconds(file: File): Promise<number> {
@@ -260,13 +286,13 @@ export function ProjectsPage() {
 
       {/* projects + milestones + updates */}
       <section>
-        {projects.length === 0 ? (
+        {myProjects.length === 0 ? (
           <p style={{ color: "#888", fontStyle: "italic" }}>
             No projects yet.
           </p>
         ) : (
           <ul style={{ listStyle: "none", padding: 0 }}>
-            {projects.map((project) => {
+            {myProjects.map((project) => {
               const projectMilestones = milestones.filter(
                 (m) => m.projectId === project.id
               );
