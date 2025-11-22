@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
@@ -92,6 +93,12 @@ export function FamilyNewsPage() {
         first.
       </p>
 
+      <div style={{ margin: "0.5rem 0 1rem" }}>
+        <Link to="/member-news">
+          <button type="button">Go to Member News</button>
+        </Link>
+      </div>
+
       {householdUpdates.length === 0 ? (
         <p style={{ color: "#888", fontStyle: "italic", marginTop: "1rem" }}>
           No updates yet.
@@ -122,5 +129,4 @@ export function FamilyNewsPage() {
     </main>
   );
 }
-
 

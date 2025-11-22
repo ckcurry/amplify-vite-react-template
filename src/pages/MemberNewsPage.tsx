@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
 
@@ -113,6 +114,12 @@ export function MemberNewsPage() {
     <main>
       <h1>Member news</h1>
       <p>Personal project updates from members of your household.</p>
+
+      <div style={{ margin: "0.5rem 0 1rem" }}>
+        <Link to="/family-news">
+          <button type="button">Go to Family News</button>
+        </Link>
+      </div>
 
       {memberUpdates.length === 0 ? (
         <p style={{ color: "#888", fontStyle: "italic", marginTop: "1rem" }}>

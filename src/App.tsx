@@ -8,6 +8,7 @@ import { HouseholdHome } from "./pages/HouseholdHome";
 import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
 import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
 import { FamilyNewsPage } from "./pages/FamilyNewsPage";
+import { MemberNewsPage } from "./pages/MemberNewsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 
 function AppShell() {
@@ -150,6 +151,7 @@ function AppShell() {
             element={<HouseholdGroceryPage />}
           />
           <Route path="/family-news" element={<FamilyNewsPage />} />
+          <Route path="/member-news" element={<MemberNewsPage />} />
         </Routes>
       </div>
     </div>
