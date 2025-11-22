@@ -72,7 +72,7 @@ const schema = a.schema({
 
       content: a.string().required(),
       completed: a.boolean().required(),
-      scheduledFor: a.date().required(),
+      scheduledFor: a.date(),
 
       // recurrence info
       recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY"]),
