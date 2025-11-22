@@ -44,9 +44,11 @@ export function Dashboard() {
   const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
   const [newTodoContent, setNewTodoContent] = useState("");
 
-  // Project dialog
-  const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
-  const [newProjectName, setNewProjectName] = useState("");
+// Project dialog
+const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
+const [newProjectName, setNewProjectName] = useState("");
+const [newProjectMilestones, setNewProjectMilestones] = useState<string[]>([]);
+const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
 
   // 3 active task slots (each holds either a personal todo or a household task)
   const [activeSlots, setActiveSlots] = useState<SlotValue[]>([
@@ -298,13 +300,26 @@ export function Dashboard() {
 
   /* ===================== PROJECTS ===================== */
 
-  function openProjectDialog() {
-    setNewProjectName("");
-    setIsProjectDialogOpen(true);
-  }
+function openProjectDialog() {
+  setNewProjectName("");
+  setNewProjectMilestones([]);
+  setNewProjectMilestoneInput("");
+  setIsProjectDialogOpen(true);
+}
 
   function closeProjectDialog() {
     setIsProjectDialogOpen(false);
+  }
+
+  function addNewProjectMilestone() {
+    const title = newProjectMilestoneInput.trim();
+    if (!title) return;
+    setNewProjectMilestones((prev) => [...prev, title]);
+    setNewProjectMilestoneInput("");
+  }
+
+  function removeNewProjectMilestone(index: number) {
+    setNewProjectMilestones((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleCreateProject(e?: React.FormEvent) {
@@ -312,8 +327,24 @@ export function Dashboard() {
     const name = newProjectName.trim();
     if (!name) return;
 
-    await client.models.Project.create({ name });
+    const { data: createdProject } = await client.models.Project.create({
+      name,
+    });
+
+    if (createdProject) {
+      for (const title of newProjectMilestones) {
+        const t = title.trim();
+        if (!t) continue;
+        await client.models.Milestone.create({
+          title: t,
+          projectId: createdProject.id,
+        });
+      }
+    }
+
     setNewProjectName("");
+    setNewProjectMilestones([]);
+    setNewProjectMilestoneInput("");
     setIsProjectDialogOpen(false);
   }
 
@@ -763,6 +794,59 @@ export function Dashboard() {
                 onChange={(e) => setNewProjectName(e.target.value)}
                 style={{ width: "100%", marginBottom: "1rem" }}
               />
+
+              <div style={{ marginBottom: "1rem" }}>
+                <label
+                  style={{ display: "block", marginBottom: "0.35rem" }}
+                >
+                  Milestones (optional)
+                </label>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    marginBottom: "0.5rem",
+                  }}
+                >
+                  <input
+                    type="text"
+                    placeholder="Milestone title"
+                    value={newProjectMilestoneInput}
+                    onChange={(e) => setNewProjectMilestoneInput(e.target.value)}
+                    style={{ flex: "1 1 200px", minWidth: 0 }}
+                  />
+                  <button type="button" onClick={addNewProjectMilestone}>
+                    Add
+                  </button>
+                </div>
+                {newProjectMilestones.length > 0 && (
+                  <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+                    {newProjectMilestones.map((title, idx) => (
+                      <li
+                        key={`${title}-${idx}`}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: "0.5rem",
+                          marginBottom: "0.35rem",
+                        }}
+                      >
+                        <span>{title}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeNewProjectMilestone(idx)}
+                          style={{ fontSize: "0.8rem" }}
+                        >
+                          remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
               <div
                 style={{
                   display: "flex",
