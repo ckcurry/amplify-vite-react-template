@@ -358,13 +358,13 @@ export function HouseholdHome() {
                 marginTop: "0.75rem",
               }}
             >
-              <Link to="/household/projects">
+              <Link to="/household-projects">
                 <button type="button">Household Projects</button>
               </Link>
-              <Link to="/household/grocery">
+              <Link to="/household-grocery">
                 <button type="button">Grocery &amp; Dinner</button>
               </Link>
-              <Link to="/household/news">
+              <Link to="/family-news">
                 <button type="button">Family News</button>
               </Link>
             </div>
