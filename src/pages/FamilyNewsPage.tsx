@@ -72,27 +72,6 @@ export function FamilyNewsPage() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-  type ViewMode = "HOUSEHOLD" | "MEMBERS";
-  const [viewMode, setViewMode] = useState<ViewMode>("HOUSEHOLD");
-
-  // Best-effort author extraction; Amplify adds createdBy/owner metadata on mutations.
-  const updatesWithAuthor = householdUpdates.map((u) => {
-    const createdBy = (u as any).createdBy ?? (u as any).owner ?? "Unknown member";
-    return { ...u, createdBy };
-  });
-
-  const updatesByMember = updatesWithAuthor.reduce<
-    Record<string, Array<(typeof updatesWithAuthor)[number]>>
-  >(
-    (acc, u) => {
-      const key = u.createdBy || "Unknown member";
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(u);
-      return acc;
-    },
-    {}
-  );
-
   function getProjectNameForUpdate(update: Schema["HouseholdMilestoneUpdate"]["type"]) {
     const milestone = milestoneById.get(update.milestoneId);
     if (!milestone) return "";
@@ -113,104 +92,35 @@ export function FamilyNewsPage() {
         first.
       </p>
 
-      <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}>
-        <button
-          type="button"
-          onClick={() => setViewMode("HOUSEHOLD")}
-          style={{
-            padding: "0.4rem 0.75rem",
-            borderRadius: "0.35rem",
-            border: viewMode === "HOUSEHOLD" ? "2px solid #646cff" : "1px solid #ccc",
-            background: viewMode === "HOUSEHOLD" ? "#eef2ff" : "white",
-          }}
-        >
-          Household
-        </button>
-        <button
-          type="button"
-          onClick={() => setViewMode("MEMBERS")}
-          style={{
-            padding: "0.4rem 0.75rem",
-            borderRadius: "0.35rem",
-            border: viewMode === "MEMBERS" ? "2px solid #646cff" : "1px solid #ccc",
-            background: viewMode === "MEMBERS" ? "#eef2ff" : "white",
-          }}
-        >
-          Members
-        </button>
-      </div>
-
-      {viewMode === "HOUSEHOLD" ? (
-        householdUpdates.length === 0 ? (
-          <p style={{ color: "#888", fontStyle: "italic", marginTop: "1rem" }}>
-            No updates yet.
-          </p>
-        ) : (
-          <ul style={{ marginTop: "1rem" }}>
-            {householdUpdates.map((u) => (
-              <li
-                key={u.id}
-                style={{
-                  borderBottom: "1px solid #eee",
-                  padding: "0.5rem 0",
-                  marginBottom: "0.25rem",
-                }}
-              >
-                <div style={{ fontSize: "0.85rem", color: "#666" }}>
-                  {new Date(u.createdAt).toLocaleString()}
-                </div>
-                <div style={{ fontWeight: "bold" }}>
-                  {getProjectNameForUpdate(u)} &mdash;{" "}
-                  {getMilestoneTitle(u) || "Milestone"}
-                </div>
-                <div>{u.note || "Video update"}</div>
-              </li>
-            ))}
-          </ul>
-        )
+      {householdUpdates.length === 0 ? (
+        <p style={{ color: "#888", fontStyle: "italic", marginTop: "1rem" }}>
+          No updates yet.
+        </p>
       ) : (
-        <div style={{ marginTop: "1rem", display: "grid", gap: "1rem" }}>
-          {Object.keys(updatesByMember).length === 0 ? (
-            <p style={{ color: "#888", fontStyle: "italic" }}>
-              No member updates yet.
-            </p>
-          ) : (
-            Object.entries(updatesByMember).map(([member, memberUpdates]) => (
-              <div
-                key={member}
-                style={{
-                  border: "1px solid #eee",
-                  borderRadius: "0.5rem",
-                  padding: "0.75rem",
-                  background: "white",
-                }}
-              >
-                <h3 style={{ margin: "0 0 0.5rem" }}>{member}</h3>
-                {memberUpdates.length === 0 ? (
-                  <p style={{ color: "#888", fontStyle: "italic" }}>
-                    No updates yet.
-                  </p>
-                ) : (
-                  <ul style={{ margin: 0, paddingLeft: "1rem" }}>
-                    {memberUpdates.map((u) => (
-                      <li key={u.id} style={{ marginBottom: "0.35rem" }}>
-                        <div style={{ fontSize: "0.85rem", color: "#666" }}>
-                          {new Date(u.createdAt).toLocaleString()}
-                        </div>
-                        <div style={{ fontWeight: "bold" }}>
-                          {getProjectNameForUpdate(u)} &mdash;{" "}
-                          {getMilestoneTitle(u) || "Milestone"}
-                        </div>
-                        <div>{u.note || "Video update"}</div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
+        <ul style={{ marginTop: "1rem" }}>
+          {householdUpdates.map((u) => (
+            <li
+              key={u.id}
+              style={{
+                borderBottom: "1px solid #eee",
+                padding: "0.5rem 0",
+                marginBottom: "0.25rem",
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#666" }}>
+                {new Date(u.createdAt).toLocaleString()}
               </div>
-            ))
-          )}
-        </div>
+              <div style={{ fontWeight: "bold" }}>
+                {getProjectNameForUpdate(u)} &mdash;{" "}
+                {getMilestoneTitle(u) || "Milestone"}
+              </div>
+              <div>{u.note || "Video update"}</div>
+            </li>
+          ))}
+        </ul>
       )}
     </main>
   );
 }
+
+
