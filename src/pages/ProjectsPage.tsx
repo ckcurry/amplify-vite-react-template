@@ -38,6 +38,12 @@ export function ProjectsPage() {
   const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [isUploadingUpdate, setIsUploadingUpdate] = useState(false);
+  const [expandedProjectId, setExpandedProjectId] = useState<string | null>(
+    null
+  );
+  const [selectedMilestoneId, setSelectedMilestoneId] = useState<string | null>(
+    null
+  );
 
   // subscribe to data
   useEffect(() => {
@@ -158,6 +164,24 @@ export function ProjectsPage() {
     await client.models.Project.create({ name });
     setNewProjectName("");
     setIsProjectDialogOpen(false);
+  }
+
+  function toggleProject(projectId: string) {
+    setExpandedProjectId((prev) => {
+      const next = prev === projectId ? null : projectId;
+      if (next !== projectId) {
+        // collapsing; clear selected milestone
+        setSelectedMilestoneId(null);
+      } else {
+        // switching to another project; reset milestone selection
+        setSelectedMilestoneId(null);
+      }
+      return next;
+    });
+  }
+
+  function selectMilestone(milestoneId: string) {
+    setSelectedMilestoneId((prev) => (prev === milestoneId ? null : milestoneId));
   }
 
   // ===== milestone actions =====
@@ -284,7 +308,7 @@ export function ProjectsPage() {
         <button onClick={openProjectDialog}>+ new project</button>
       </section>
 
-      {/* projects + milestones + updates */}
+      {/* projects + milestones + updates (drill-down) */}
       <section>
         {myProjects.length === 0 ? (
           <p style={{ color: "#888", fontStyle: "italic" }}>
@@ -296,6 +320,7 @@ export function ProjectsPage() {
               const projectMilestones = milestones.filter(
                 (m) => m.projectId === project.id
               );
+              const isExpanded = expandedProjectId === project.id;
               return (
                 <li
                   key={project.id}
@@ -317,67 +342,102 @@ export function ProjectsPage() {
                     }}
                   >
                     <strong>{project.name}</strong>
-                    <button onClick={() => openMilestoneDialog(project.id)}>
-                      + add milestone
-                    </button>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button onClick={() => toggleProject(project.id)}>
+                        {isExpanded ? "Hide milestones" : "View milestones"}
+                      </button>
+                      <button onClick={() => openMilestoneDialog(project.id)}>
+                        + add milestone
+                      </button>
+                    </div>
                   </div>
 
-                  {projectMilestones.length === 0 ? (
-                    <div style={{ color: "#888", fontStyle: "italic" }}>
-                      No milestones yet
-                    </div>
-                  ) : (
-                    <ul style={{ marginLeft: "1rem" }}>
-                      {projectMilestones.map((milestone) => {
-                        const milestoneUpdates = updates.filter(
-                          (u) => u.milestoneId === milestone.id
-                        );
-                        return (
-                          <li
-                            key={milestone.id}
-                            style={{ marginBottom: "0.5rem" }}
-                          >
-                            <div
-                              style={{
-                                display: "flex",
-                                flexWrap: "wrap",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: "0.5rem",
-                              }}
-                            >
-                              <span>• {milestone.title}</span>
-                              <div
+                  {isExpanded && (
+                    <>
+                      {projectMilestones.length === 0 ? (
+                        <div style={{ color: "#888", fontStyle: "italic" }}>
+                          No milestones yet
+                        </div>
+                      ) : (
+                        <ul style={{ marginLeft: "1rem" }}>
+                          {projectMilestones.map((milestone) => {
+                            const isSelected = selectedMilestoneId === milestone.id;
+                            return (
+                              <li
+                                key={milestone.id}
                                 style={{
-                                  display: "flex",
-                                  flexWrap: "wrap",
-                                  gap: "0.5rem",
+                                  marginBottom: "0.5rem",
+                                  border:
+                                    isSelected && updates.length > 0
+                                      ? "1px solid #ddd"
+                                      : "none",
+                                  borderRadius: "0.35rem",
+                                  padding: "0.35rem 0.5rem",
                                 }}
                               >
-                                <button
-                                  onClick={() => openUpdateDialog(milestone.id)}
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: "0.5rem",
+                                  }}
                                 >
-                                  + add update
-                                </button>
-                                <button
-                                  onClick={() => deleteMilestone(milestone.id)}
-                                >
-                                  delete milestone
-                                </button>
-                              </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => selectMilestone(milestone.id)}
+                                    style={{
+                                      background: "transparent",
+                                      border: "none",
+                                      padding: 0,
+                                      textAlign: "left",
+                                      cursor: "pointer",
+                                      fontWeight: isSelected ? 700 : 400,
+                                    }}
+                                  >
+                                    • {milestone.title}
+                                  </button>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: "0.5rem",
+                                    }}
+                                  >
+                                    <button
+                                      onClick={() => openUpdateDialog(milestone.id)}
+                                    >
+                                      + add update
+                                    </button>
+                                    <button
+                                      onClick={() => deleteMilestone(milestone.id)}
+                                    >
+                                      delete milestone
+                                    </button>
+                                  </div>
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+
+                      {/* Updates list for selected milestone */}
+                      {selectedMilestoneId && (
+                        <div style={{ marginTop: "0.5rem", marginLeft: "1rem" }}>
+                          <h4 style={{ margin: "0 0 0.25rem" }}>Updates</h4>
+                          {updates.filter((u) => u.milestoneId === selectedMilestoneId)
+                            .length === 0 ? (
+                            <div style={{ color: "#888", fontStyle: "italic" }}>
+                              No updates yet for this milestone.
                             </div>
-
-                            {/* Updates list under each milestone */}
-                            {milestoneUpdates.length > 0 && (
-                              <ul
-                                style={{
-                                  marginLeft: "1.5rem",
-                                  marginTop: "0.25rem",
-                                }}
-                              >
-                                {milestoneUpdates.map((update) => {
+                          ) : (
+                            <ul style={{ margin: 0, paddingLeft: "1rem" }}>
+                              {updates
+                                .filter((u) => u.milestoneId === selectedMilestoneId)
+                                .map((update) => {
                                   const videoSrc = updateVideoUrls[update.id];
-
                                   return (
                                     <li
                                       key={update.id}
@@ -429,9 +489,7 @@ export function ProjectsPage() {
                                           }}
                                         >
                                           <button
-                                            onClick={() =>
-                                              deleteUpdate(update.id)
-                                            }
+                                            onClick={() => deleteUpdate(update.id)}
                                             style={{ fontSize: "0.8rem" }}
                                           >
                                             delete
@@ -441,12 +499,11 @@ export function ProjectsPage() {
                                     </li>
                                   );
                                 })}
-                              </ul>
-                            )}
-                          </li>
-                        );
-                      })}
-                    </ul>
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </>
                   )}
                 </li>
               );
