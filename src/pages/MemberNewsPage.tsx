@@ -120,15 +120,6 @@ export function MemberNewsPage() {
     };
   }, [memberUpdates, updateVideoUrls]);
 
-  const groupedByMember = memberUpdates.reduce<
-    Record<string, typeof memberUpdates>
-  >((acc, item) => {
-    const key = item.owner || "Unknown member";
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(item);
-    return acc;
-  }, {});
-
   if (!membership || !currentHouseholdId) {
     return (
       <main>
