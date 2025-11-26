@@ -10,6 +10,13 @@ const schema = a.schema({
     // ⭐ Only the owner can read/write their todos
     .authorization((allow) => [allow.owner()]),
 
+  // User profile info (per user)
+  UserProfile: a
+    .model({
+      displayName: a.string().required(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
   // Projects belong to the signed-in user
   Project: a
     .model({
