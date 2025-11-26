@@ -5,11 +5,8 @@ import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 // Page components
 import { Dashboard } from "./pages/Dashboard";
 import { HouseholdHome } from "./pages/HouseholdHome";
-import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
-import { HouseholdGroceryPage } from "./pages/HouseholdGroceryPage";
-import { FamilyNewsPage } from "./pages/FamilyNewsPage";
-import { MemberNewsPage } from "./pages/MemberNewsPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
+import { ProfilePage } from "./pages/ProfilePage";
 
 function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -87,11 +84,11 @@ function AppShell() {
                 </li>
                 <li>
                   <Link
-                    to="/projects"
+                    to="/profile"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    My Projects
+                    Profile
                   </Link>
                 </li>
                 <li>
@@ -141,17 +138,8 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/household" element={<HouseholdHome />} />
-          <Route
-            path="/household-projects"
-            element={<HouseholdProjectsPage />}
-          />
-          <Route
-            path="/household-grocery"
-            element={<HouseholdGroceryPage />}
-          />
-          <Route path="/family-news" element={<FamilyNewsPage />} />
-          <Route path="/member-news" element={<MemberNewsPage />} />
         </Routes>
       </div>
     </div>
