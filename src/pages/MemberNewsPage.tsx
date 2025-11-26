@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { client } from "../client";
 import type { Schema } from "../../amplify/data/resource";
+import { getUrl } from "aws-amplify/storage";
 
 type WithOwner = { owner?: string; createdBy?: string };
 
@@ -20,6 +21,9 @@ export function MemberNewsPage() {
   const [updates, setUpdates] = useState<
     Array<Schema["MilestoneUpdate"]["type"]>
   >([]);
+  const [updateVideoUrls, setUpdateVideoUrls] = useState<Record<string, string>>(
+    {}
+  );
 
   useEffect(() => {
     const membershipSub =
@@ -92,6 +96,30 @@ export function MemberNewsPage() {
         new Date(a.update.createdAt).getTime()
     );
 
+  // Load signed URLs for videos in view
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUrls() {
+      const entries: [string, string][] = [];
+      for (const { update } of memberUpdates) {
+        if (!update.videoUrl || updateVideoUrls[update.id]) continue;
+        try {
+          const { url } = await getUrl({ path: update.videoUrl });
+          if (!cancelled) entries.push([update.id, url.href]);
+        } catch (err) {
+          console.error("Failed to load video URL", update.id, err);
+        }
+      }
+      if (!cancelled && entries.length > 0) {
+        setUpdateVideoUrls((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    }
+    loadUrls();
+    return () => {
+      cancelled = true;
+    };
+  }, [memberUpdates, updateVideoUrls]);
+
   const groupedByMember = memberUpdates.reduce<
     Record<string, typeof memberUpdates>
   >((acc, item) => {
@@ -126,41 +154,63 @@ export function MemberNewsPage() {
           No member updates yet.
         </p>
       ) : (
-        <div
-          style={{
-            marginTop: "1rem",
-            display: "grid",
-            gap: "1rem",
-          }}
-        >
-          {Object.entries(groupedByMember).map(([member, items]) => (
-            <div
-              key={member}
-              style={{
-                border: "1px solid #eee",
-                borderRadius: "0.5rem",
-                padding: "0.75rem",
-                background: "white",
-              }}
-            >
-              <h3 style={{ margin: "0 0 0.5rem" }}>{member}</h3>
-              <ul style={{ margin: 0, paddingLeft: "1rem" }}>
-                {items.map(({ update, milestone, project }) => (
-                  <li key={update.id} style={{ marginBottom: "0.5rem" }}>
-                    <div style={{ fontSize: "0.85rem", color: "#666" }}>
-                      {new Date(update.createdAt).toLocaleString()}
-                    </div>
-                    <div style={{ fontWeight: "bold" }}>
-                      {(project?.name ?? "Project")} &mdash;{" "}
-                      {milestone?.title ?? "Milestone"}
-                    </div>
-                    <div>{update.note || "Video update"}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
+        <ul style={{ marginTop: "1rem", listStyle: "none", padding: 0 }}>
+          {memberUpdates.map(({ update, milestone, project, owner }) => {
+            const videoSrc = updateVideoUrls[update.id];
+            return (
+              <li
+                key={update.id}
+                style={{
+                  border: "1px solid #eee",
+                  borderRadius: "0.5rem",
+                  padding: "0.75rem",
+                  marginBottom: "0.75rem",
+                  background: "white",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "space-between",
+                    gap: "0.5rem",
+                    marginBottom: "0.25rem",
+                  }}
+                >
+                  <div style={{ fontWeight: 600 }}>
+                    {owner || "Unknown member"}
+                  </div>
+                  <div style={{ fontSize: "0.85rem", color: "#666" }}>
+                    {new Date(update.createdAt).toLocaleString()}
+                  </div>
+                </div>
+                <div style={{ fontWeight: "bold", marginBottom: "0.25rem" }}>
+                  {(project?.name ?? "Project")} &mdash;{" "}
+                  {milestone?.title ?? "Milestone"}
+                </div>
+                <div style={{ marginBottom: "0.35rem" }}>
+                  {update.note || "Video update"}
+                </div>
+                {videoSrc ? (
+                  <video
+                    src={videoSrc}
+                    controls
+                    style={{
+                      width: "100%",
+                      maxHeight: "260px",
+                      borderRadius: "0.35rem",
+                      background: "#000",
+                    }}
+                  />
+                ) : update.videoUrl ? (
+                  <div style={{ fontSize: "0.85rem", color: "#888" }}>
+                    Loading video…
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </main>
   );

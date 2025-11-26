@@ -454,7 +454,7 @@ export function ProjectsPage() {
                                           gap: "0.25rem",
                                         }}
                                       >
-                                        <div style={{ fontSize: "0.9rem" }}>
+                                        <div style={{ fontSize: "0.9rem", color: "#111" }}>
                                           {update.note || "Video update"}
                                         </div>
 
