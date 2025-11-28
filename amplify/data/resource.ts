@@ -10,6 +10,50 @@ const schema = a.schema({
     // ⭐ Only the owner can read/write their todos
     .authorization((allow) => [allow.owner()]),
 
+  // Community interests and Q&A
+  Interest: a
+    .model({
+      name: a.string().required(),
+      userInterests: a.hasMany("UserInterest", "interestId"),
+      questions: a.hasMany("Question", "interestId"),
+    })
+    .authorization((allow) => [allow.authenticated()]),
+
+  UserInterest: a
+    .model({
+      interestId: a.id().required(),
+      interest: a.belongsTo("Interest", "interestId"),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  Question: a
+    .model({
+      interestId: a.id().required(),
+      interest: a.belongsTo("Interest", "interestId"),
+      content: a.string().required(),
+      answers: a.hasMany("Answer", "questionId"),
+      upvotes: a.hasMany("AnswerUpvote", "questionId"),
+    })
+    .authorization((allow) => [allow.owner(), allow.authenticated().to(["read", "create"])])
+    ,
+
+  Answer: a
+    .model({
+      questionId: a.id().required(),
+      question: a.belongsTo("Question", "questionId"),
+      content: a.string().required(),
+    })
+    .authorization((allow) => [allow.owner(), allow.authenticated().to(["read", "create"])])
+    ,
+
+  AnswerUpvote: a
+    .model({
+      questionId: a.id().required(),
+      question: a.belongsTo("Question", "questionId"),
+    })
+    .authorization((allow) => [allow.owner(), allow.authenticated().to(["read", "create"])])
+    ,
+
   // User profile info (per user)
   UserProfile: a
     .model({
