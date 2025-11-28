@@ -5,8 +5,8 @@ import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 // Page components
 import { Dashboard } from "./pages/Dashboard";
 import { HouseholdHome } from "./pages/HouseholdHome";
-import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProfilePage } from "./pages/ProfilePage";
+import { CommunityPage } from "./pages/CommunityPage";
 
 function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -84,11 +84,11 @@ function AppShell() {
                 </li>
                 <li>
                   <Link
-                    to="/profile"
+                    to="/community"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Profile
+                    Community
                   </Link>
                 </li>
                 <li>
@@ -102,29 +102,11 @@ function AppShell() {
                 </li>
                 <li>
                   <Link
-                    to="/household-projects"
+                    to="/profile"
                     onClick={() => setMenuOpen(false)}
                     style={{ display: "block", padding: "0.25rem 0" }}
                   >
-                    Household Projects
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/household-grocery"
-                    onClick={() => setMenuOpen(false)}
-                    style={{ display: "block", padding: "0.25rem 0" }}
-                  >
-                    Grocery & Dinner
-                  </Link>
-                </li>
-                <li>
-                  <Link
-                    to="/family-news"
-                    onClick={() => setMenuOpen(false)}
-                    style={{ display: "block", padding: "0.25rem 0" }}
-                  >
-                    Family News
+                    Profile
                   </Link>
                 </li>
               </ul>
@@ -137,7 +119,7 @@ function AppShell() {
       <div style={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<Dashboard />} />
-          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/community" element={<CommunityPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/household" element={<HouseholdHome />} />
         </Routes>
