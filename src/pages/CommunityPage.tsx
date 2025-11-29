@@ -49,6 +49,7 @@ export function CommunityPage() {
   const [newAnswerByQuestion, setNewAnswerByQuestion] = useState<
     Record<string, string>
   >({});
+  const [pendingInterest, setPendingInterest] = useState<string | null>(null);
 
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
@@ -119,7 +120,7 @@ export function CommunityPage() {
     const interestId = await ensureInterest(name);
     if (!interestId) return;
     if (userInterestIds.has(interestId)) return;
-    await client.models.UserInterest.create({ interestId });
+    setPendingInterest(interestId);
   }
 
   const selectedInterests = interests.filter((i) =>
@@ -249,6 +250,58 @@ export function CommunityPage() {
           );
         })}
       </section>
+
+      {pendingInterest && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 999,
+            padding: "1rem",
+            boxSizing: "border-box",
+          }}
+          onClick={() => setPendingInterest(null)}
+        >
+          <div
+            style={{
+              background: "white",
+              padding: "1.25rem",
+              borderRadius: "0.5rem",
+              width: "100%",
+              maxWidth: "420px",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginTop: 0 }}>Set your interests</h3>
+            <p style={{ marginBottom: "0.75rem" }}>
+              You can only set or change your interests once per month. Continue
+              to join this group?
+            </p>
+            <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+              <button type="button" onClick={() => setPendingInterest(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await client.models.UserInterest.create({ interestId: pendingInterest });
+                  } finally {
+                    setPendingInterest(null);
+                  }
+                }}
+              >
+                Yes, join
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <section>
         <h2>Your groups</h2>
