@@ -10,8 +10,9 @@ const INTEREST_OPTIONS = [
   { name: "DevOps", group: "Intellectual" },
   { name: "Startups", group: "Intellectual" },
   { name: "Finance", group: "Intellectual" },
-  { name: "Design", group: "Intellectual" },
-  { name: "Photography", group: "Intellectual" },
+  { name: "Design", group: "Creative" },
+  { name: "Photography", group: "Creative" },
+  { name: "Writing", group: "Creative" },
 
   { name: "Gaming", group: "Activity" },
   { name: "Travel", group: "Activity" },
@@ -215,7 +216,8 @@ export function CommunityPage() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: "100%", maxWidth: "400px", marginBottom: "0.75rem" }}
         />
-        {["Intellectual", "Activity", "Health", "Spiritual"].map((group) => {
+        {["Intellectual", "Activity", "Health", "Spiritual", "Creative"].map(
+          (group) => {
           const groupItems = availableInterests.filter(
             (opt) => opt.group === group
           );
