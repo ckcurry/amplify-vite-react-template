@@ -7,6 +7,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { HouseholdHome } from "./pages/HouseholdHome";
 import { ProfilePage } from "./pages/ProfilePage";
 import { CommunityPage } from "./pages/CommunityPage";
+import { ProjectsPage } from "./pages/ProjectsPage";
 
 function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,6 +122,7 @@ function AppShell() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/household" element={<HouseholdHome />} />
         </Routes>
       </div>
