@@ -1,5 +1,6 @@
 // src/pages/Dashboard.tsx
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { uploadData } from "aws-amplify/storage";
 import { getCurrentUser } from "aws-amplify/auth";
@@ -478,7 +479,9 @@ function openProjectDialog() {
           justifyContent: "center",
         }}
       >
-        <button onClick={openTodoDialog}>+ new task</button>
+        <Link to="/tasks">
+          <button type="button">Manage tasks</button>
+        </Link>
         <button onClick={openProjectDialog}>+ new project</button>
       </div>
 
