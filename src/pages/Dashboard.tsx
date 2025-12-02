@@ -41,10 +41,6 @@ export function Dashboard() {
     Array<Schema["HouseholdTask"]["type"]>
   >([]);
 
-  // Todo dialog
-  const [isTodoDialogOpen, setIsTodoDialogOpen] = useState(false);
-  const [newTodoContent, setNewTodoContent] = useState("");
-
 // Project dialog
 const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
 const [newProjectName, setNewProjectName] = useState("");
@@ -195,27 +191,6 @@ const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
 
       video.src = URL.createObjectURL(file);
     });
-  }
-
-  /* ===================== TODOS ===================== */
-
-  function openTodoDialog() {
-    setNewTodoContent("");
-    setIsTodoDialogOpen(true);
-  }
-
-  function closeTodoDialog() {
-    setIsTodoDialogOpen(false);
-  }
-
-  async function handleCreateTodo(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const content = newTodoContent.trim();
-    if (!content) return;
-
-    await client.models.Todo.create({ content });
-    setNewTodoContent("");
-    setIsTodoDialogOpen(false);
   }
 
   async function deleteTodo(id: string) {
@@ -700,63 +675,6 @@ function openProjectDialog() {
       <button onClick={signOut} style={{ marginTop: "1rem" }}>
         Sign out
       </button>
-
-      {/* ===== Todo dialog ===== */}
-      {isTodoDialogOpen && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 999,
-            padding: "1rem",
-            boxSizing: "border-box",
-          }}
-          onClick={closeTodoDialog}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "1.5rem",
-              borderRadius: "0.5rem",
-              width: "100%",
-              maxWidth: "420px",
-              maxHeight: "90vh",
-              overflowY: "auto",
-              boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
-              boxSizing: "border-box",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 style={{ marginTop: 0 }}>New task</h2>
-            <form onSubmit={handleCreateTodo}>
-              <input
-                type="text"
-                placeholder="Task content"
-                value={newTodoContent}
-                onChange={(e) => setNewTodoContent(e.target.value)}
-                style={{ width: "100%", marginBottom: "1rem" }}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  gap: "0.5rem",
-                  justifyContent: "flex-end",
-                  flexWrap: "wrap",
-                }}
-              >
-                <button type="button" onClick={closeTodoDialog}>
-                  Cancel
-                </button>
-                <button type="submit">Create</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ===== Project dialog ===== */}
       {isProjectDialogOpen && (
