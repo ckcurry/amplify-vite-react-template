@@ -10,6 +10,17 @@ const schema = a.schema({
     // ⭐ Only the owner can read/write their todos
     .authorization((allow) => [allow.owner()]),
 
+  // Personal scheduled tasks with recurrence
+  ScheduledTask: a
+    .model({
+      content: a.string().required(),
+      completed: a.boolean().required(),
+      scheduledFor: a.date().required(),
+      recurrence: a.enum(["NONE", "DAILY", "WEEKLY", "MONTHLY", "YEARLY"]),
+      recurrenceEndDate: a.date(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
   // Community interests and Q&A
   Interest: a
     .model({

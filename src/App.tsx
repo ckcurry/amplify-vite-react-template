@@ -9,6 +9,7 @@ import { ProfilePage } from "./pages/ProfilePage";
 import { CommunityPage } from "./pages/CommunityPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { HouseholdProjectsPage } from "./pages/HouseholdProjectsPage";
+import { TaskPage } from "./pages/TaskPage";
 
 function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -129,6 +130,7 @@ function AppShell() {
             path="/household-projects"
             element={<HouseholdProjectsPage />}
           />
+          <Route path="/tasks" element={<TaskPage />} />
         </Routes>
       </div>
     </div>
