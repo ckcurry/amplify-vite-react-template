@@ -9,9 +9,12 @@ import type { Schema } from "../../amplify/data/resource";
 
 /* ===================== TYPES & CONSTANTS ===================== */
 
+type RecurrenceType = "NONE" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+
 type SlotValue =
   | { source: "todo"; id: string }
   | { source: "household"; id: string }
+  | { source: "personal"; id: string }
   | null;
 
 const ACTIVE_SLOTS_STORAGE_KEY = "dashboard_activeSlots_v2";
@@ -24,6 +27,42 @@ function getTodayLocalDateString(): string {
   return `${y}-${m}-${d}`;
 }
 
+function occursOnDate(
+  task: Schema["ScheduledTask"]["type"],
+  dateStr: string
+): boolean {
+  if (!task.scheduledFor) return false;
+  const base = new Date(task.scheduledFor + "T00:00:00");
+  const target = new Date(dateStr + "T00:00:00");
+  if (Number.isNaN(base.getTime()) || Number.isNaN(target.getTime())) {
+    return false;
+  }
+  if (target < base) return false;
+
+  const rec: RecurrenceType =
+    ((task as any).recurrence as RecurrenceType) ?? "NONE";
+  const end = (task as any).recurrenceEndDate
+    ? new Date((task as any).recurrenceEndDate + "T00:00:00")
+    : null;
+  if (end && target > end) return false;
+
+  if (rec === "NONE") return task.scheduledFor === dateStr;
+  if (rec === "DAILY") return true;
+
+  const msPerDay = 1000 * 60 * 60 * 24;
+  const diffDays = Math.round((target.getTime() - base.getTime()) / msPerDay);
+  if (diffDays < 0) return false;
+
+  if (rec === "WEEKLY") return diffDays % 7 === 0;
+  if (rec === "MONTHLY") return base.getDate() === target.getDate();
+  if (rec === "YEARLY")
+    return (
+      base.getDate() === target.getDate() &&
+      base.getMonth() === target.getMonth()
+    );
+  return false;
+}
+
 /* ===================== DASHBOARD ===================== */
 
 export function Dashboard() {
@@ -33,6 +72,9 @@ export function Dashboard() {
   const [projects, setProjects] = useState<Array<Schema["Project"]["type"]>>([]);
   const [milestones, setMilestones] = useState<
     Array<Schema["Milestone"]["type"]>
+  >([]);
+  const [scheduledTasks, setScheduledTasks] = useState<
+    Array<Schema["ScheduledTask"]["type"]>
   >([]);
 
   const [membership, setMembership] =
@@ -47,7 +89,7 @@ const [newProjectName, setNewProjectName] = useState("");
 const [newProjectMilestones, setNewProjectMilestones] = useState<string[]>([]);
 const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
 
-  // 3 active task slots (each holds either a personal todo or a household task)
+  // 3 active task slots (each holds a personal task or a household task)
   const [activeSlots, setActiveSlots] = useState<SlotValue[]>([
     null,
     null,
@@ -101,12 +143,18 @@ const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
         next: (data: any) => setHouseholdTasks([...data.items]),
       });
 
+    const personalTaskSub =
+      client.models.ScheduledTask.observeQuery().subscribe({
+        next: (data: any) => setScheduledTasks([...data.items]),
+      });
+
     return () => {
       todoSub.unsubscribe();
       projectSub.unsubscribe();
       milestoneSub.unsubscribe();
       membershipSub.unsubscribe();
       householdTaskSub.unsubscribe();
+      personalTaskSub.unsubscribe();
     };
   }, []);
 
@@ -228,6 +276,22 @@ const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
 
   const availableTodos = todos.filter((t) => !usedTodoIds.has(t.id));
 
+  const usedPersonalTaskIds = new Set(
+    activeSlots
+      .filter((s): s is { source: "personal"; id: string } => !!s && s.source === "personal")
+      .map((s) => s.id)
+  );
+
+  const todaysPersonalTasks = useMemo(() => {
+    return scheduledTasks.filter(
+      (t) => occursOnDate(t, today) && !t.completed
+    );
+  }, [scheduledTasks, today]);
+
+  const availablePersonalTasks = todaysPersonalTasks.filter(
+    (t) => !usedPersonalTaskIds.has(t.id)
+  );
+
   /* ===================== SLOTS & TASK PICKER ===================== */
 
   function openTaskPickerForSlot(index: number) {
@@ -256,6 +320,11 @@ const [newProjectMilestoneInput, setNewProjectMilestoneInput] = useState("");
 
     if (slot.source === "todo") {
       await deleteTodo(slot.id);
+    } else if (slot.source === "personal") {
+      await client.models.ScheduledTask.update({
+        id: slot.id,
+        completed: true,
+      });
     }
 
     setActiveSlots((prev) => {
@@ -498,6 +567,23 @@ function openProjectDialog() {
                 subt = `Household task for ${ht.scheduledFor}`;
               } else {
                 label = "Household task no longer exists";
+                subt = "Click Do later to clear";
+                exists = false;
+              }
+            } else if (slot?.source === "personal") {
+              const pt = scheduledTasks.find((p) => p.id === slot.id);
+              if (pt) {
+                label = pt.content ?? "(personal task)";
+                const recurrence = ((pt as any).recurrence as RecurrenceType) ?? "NONE";
+                const baseSubtext = pt.scheduledFor
+                  ? `Personal task for ${pt.scheduledFor}`
+                  : "Personal task";
+                subt =
+                  recurrence && recurrence !== "NONE"
+                    ? `${baseSubtext} • repeats ${recurrence.toLowerCase()}`
+                    : baseSubtext;
+              } else {
+                label = "Personal task no longer exists";
                 subt = "Click Do later to clear";
                 exists = false;
               }
@@ -969,6 +1055,55 @@ function openProjectDialog() {
                       </button>
                     </li>
                   ))}
+                </ul>
+              )}
+            </section>
+
+            {/* Personal scheduled tasks */}
+            <section style={{ marginBottom: "1rem" }}>
+              <h3>My personal tasks today</h3>
+              {availablePersonalTasks.length === 0 ? (
+                <p style={{ color: "#888", fontStyle: "italic" }}>
+                  No personal tasks scheduled for today.
+                </p>
+              ) : (
+                <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+                  {availablePersonalTasks.map((t) => {
+                    const recurrence =
+                      ((t as any).recurrence as RecurrenceType) ?? "NONE";
+                    return (
+                      <li key={t.id} style={{ marginBottom: "0.5rem" }}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            claimTaskForSlot(pickerSlotIndex, {
+                              source: "personal",
+                              id: t.id,
+                            })
+                          }
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            background: "#eef2ff",
+                            color: "#222",
+                          }}
+                        >
+                          <div>{t.content}</div>
+                          <div
+                            style={{
+                              fontSize: "0.85rem",
+                              color: "#444",
+                            }}
+                          >
+                            Scheduled for {t.scheduledFor}
+                            {recurrence && recurrence !== "NONE"
+                              ? ` • repeats ${recurrence.toLowerCase()}`
+                              : ""}
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
